@@ -13,37 +13,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
   final DatabaseService _databaseService = DatabaseService();
 
-  // Мы будем использовать FutureBuilder, 
-  // поэтому нам нужна переменная для хранения "будущих" данных
+  // Храним будущее (данные профиля)
   late Future<Map<String, dynamic>> _profileFuture;
 
   @override
   void initState() {
     super.initState();
-    // Запускаем загрузку данных при открытии экрана
+    // Загружаем данные при открытии экрана
     _profileFuture = _databaseService.getMyProfile();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Мой Профиль'),
+        title: const Text('Мой профиль'),
       ),
-      // FutureBuilder - идеальный виджет для отображения данных,
-      // которые нужно сначала загрузить.
       body: FutureBuilder<Map<String, dynamic>>(
         future: _profileFuture,
         builder: (context, snapshot) {
-
-          // 1. Состояние Загрузки
+          // 1. Состояние загрузки
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          // 2. Состояние Ошибки
+          // 2. Ошибка при загрузке
           if (snapshot.hasError) {
             return Center(
               child: Text(
@@ -54,19 +50,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
             );
           }
 
-          // 3. Состояние Успеха (Данные получены)
+          // 3. Нет данных
           if (!snapshot.hasData || snapshot.data == null) {
             return const Center(child: Text('Не удалось найти профиль.'));
           }
 
+          // 4. Данные успешно получены
           final profile = snapshot.data!;
           final fullName = profile['full_name'] ?? 'Без имени';
           final email = profile['email'] ?? 'Нет данных';
           final phone = profile['phone'] ?? 'Нет данных';
           final role = profile['role'] ?? 'user';
-          final initial = fullName.isNotEmpty ? fullName[0].toUpperCase() : '?';
+          final initial =
+              fullName.isNotEmpty ? fullName[0].toUpperCase() : '?';
 
-          // --- UI Профиля ---
+          // --- UI профиля ---
           return SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),
             child: Center(
@@ -78,7 +76,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     // Аватар
                     CircleAvatar(
                       radius: 50,
-                      backgroundColor: theme.colorScheme.primary.withOpacity(0.5),
+                      backgroundColor:
+                          theme.colorScheme.primary.withValues(alpha: 0.5),
                       child: Text(
                         initial,
                         style: theme.textTheme.headlineLarge
@@ -86,7 +85,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    
+
                     // Имя
                     Text(
                       fullName,
@@ -95,17 +94,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    // Роль (в "чипе" - выглядит красиво)
+                    // Роль (чип)
                     Chip(
                       label: Text(
                         role == 'admin' ? 'Администратор' : 'Участник',
-                        style: TextStyle(color: theme.colorScheme.onSecondaryContainer),
+                        style: TextStyle(
+                          color: theme.colorScheme.onSecondaryContainer,
+                        ),
                       ),
                       backgroundColor: theme.colorScheme.secondaryContainer,
                     ),
                     const SizedBox(height: 32),
 
-                    // Блок с информацией (ListTile - идеально для этого)
+                    // Контактная информация
                     Card(
                       child: Column(
                         children: [
@@ -125,7 +126,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 32),
 
-                    // Кнопка Выхода
+                    // Кнопка выхода
                     ElevatedButton.icon(
                       icon: const Icon(Icons.logout),
                       label: const Text('Выйти из аккаунта'),
@@ -133,7 +134,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         _authService.signOut();
                       },
                       style: ElevatedButton.styleFrom(
-                        // Красный цвет для кнопки "Выход"
                         backgroundColor: theme.colorScheme.error,
                         foregroundColor: theme.colorScheme.onError,
                         minimumSize: const Size(double.infinity, 48),

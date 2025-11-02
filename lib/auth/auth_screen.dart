@@ -98,18 +98,19 @@ class _AuthScreenState extends State<AuthScreen> {
 
   // --- UI Helpers ---
 
-  /// Создает стилизованное поле ввода
-  InputDecoration _styledInputDecoration(String label) {
-    return InputDecoration(
-      labelText: label,
-      filled: true,
-      fillColor: Colors.black.withOpacity(0.1),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8.0),
-        borderSide: BorderSide.none,
-      ),
-    );
-  }
+/// Создает стилизованное поле ввода
+InputDecoration _styledInputDecoration(String label) {
+  return InputDecoration(
+    labelText: label,
+    filled: true,
+    fillColor: Colors.black.withValues(alpha: 0.1), // ✅ исправлено
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8.0),
+      borderSide: BorderSide.none,
+    ),
+  );
+}
+
 
   /// Виджет с полями только для регистрации
   Widget _buildRegisterFields() {
