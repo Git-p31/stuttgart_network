@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 // --- ИСПРАВЛЕННЫЕ ИМПОРТЫ (убрал /screens/) ---
 import 'package:stuttgart_network/services/auth_service.dart';
@@ -15,6 +16,10 @@ Future<void> main() async {
 
  // 2. Загрузка ключей из .env
   await dotenv.load(fileName: "lib/assets/.env"); // <--- УКАЖИТЕ ПРАВИЛЬНЫЙ ПУТЬ
+
+
+// ✅ 3. ДОБАВЬТЕ ЭТУ СТРОКУ (для инициализации русской локали)
+  await initializeDateFormatting('ru_RU', null);
 
   // 3. Инициализация Supabase
   await Supabase.initialize(

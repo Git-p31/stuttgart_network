@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:stuttgart_network/services/auth_service.dart';
+// import 'package:stuttgart_network/services/auth_service.dart'; // <-- Больше не нужен
 import 'package:stuttgart_network/services/database_service.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -10,61 +10,60 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final AuthService _authService = AuthService();
+  // final AuthService _authService = AuthService(); // <-- Больше не нужен
   final DatabaseService _databaseService = DatabaseService();
 
-  // Храним будущее (данные профиля)
   late Future<Map<String, dynamic>> _profileFuture;
 
   @override
   void initState() {
     super.initState();
-    // Загружаем данные при открытии экрана
     _profileFuture = _databaseService.getMyProfile();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
+    
+    // ✅ ИСПРАВЛЕНО: Возвращаем Scaffold и AppBar
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Мой профиль'),
-      ),
+      // AppBar не нужен, так как он есть в home_screen.dart
+      // appBar: AppBar(
+      //   title: const Text('Мой Профиль'),
+      // ),
       body: FutureBuilder<Map<String, dynamic>>(
         future: _profileFuture,
         builder: (context, snapshot) {
-          // 1. Состояние загрузки
+
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          // 2. Ошибка при загрузке
           if (snapshot.hasError) {
             return Center(
-              child: Text(
-                'Ошибка загрузки профиля: ${snapshot.error}',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: theme.colorScheme.error),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(
+                  'Ошибка загрузки профиля: ${snapshot.error}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
               ),
             );
           }
 
-          // 3. Нет данных
           if (!snapshot.hasData || snapshot.data == null) {
             return const Center(child: Text('Не удалось найти профиль.'));
           }
 
-          // 4. Данные успешно получены
           final profile = snapshot.data!;
           final fullName = profile['full_name'] ?? 'Без имени';
           final email = profile['email'] ?? 'Нет данных';
           final phone = profile['phone'] ?? 'Нет данных';
           final role = profile['role'] ?? 'user';
-          final initial =
-              fullName.isNotEmpty ? fullName[0].toUpperCase() : '?';
+          final initial = fullName.isNotEmpty ? fullName[0].toUpperCase() : '?';
 
-          // --- UI профиля ---
+          // --- UI Профиля ---
           return SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),
             child: Center(
@@ -73,11 +72,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // Аватар
                     CircleAvatar(
                       radius: 50,
-                      backgroundColor:
-                          theme.colorScheme.primary.withValues(alpha: 0.5),
+                      // ignore: deprecated_member_use
+                      backgroundColor: theme.colorScheme.primary.withOpacity(0.5),
                       child: Text(
                         initial,
                         style: theme.textTheme.headlineLarge
@@ -85,8 +83,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-
-                    // Имя
+                    
                     Text(
                       fullName,
                       style: theme.textTheme.headlineSmall
@@ -94,19 +91,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    // Роль (чип)
                     Chip(
                       label: Text(
                         role == 'admin' ? 'Администратор' : 'Участник',
-                        style: TextStyle(
-                          color: theme.colorScheme.onSecondaryContainer,
-                        ),
+                        style: TextStyle(color: theme.colorScheme.onSecondaryContainer),
                       ),
                       backgroundColor: theme.colorScheme.secondaryContainer,
                     ),
                     const SizedBox(height: 32),
 
-                    // Контактная информация
                     Card(
                       child: Column(
                         children: [
@@ -126,19 +119,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 32),
 
-                    // Кнопка выхода
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.logout),
-                      label: const Text('Выйти из аккаунта'),
-                      onPressed: () {
-                        _authService.signOut();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.colorScheme.error,
-                        foregroundColor: theme.colorScheme.onError,
-                        minimumSize: const Size(double.infinity, 48),
-                      ),
-                    ),
+                    // 🛑 Кнопка "Выйти" УДАЛЕНА, так как она в Drawer
                   ],
                 ),
               ),
@@ -149,3 +130,4 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 }
+

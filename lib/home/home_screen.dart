@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:stuttgart_network/home/profile_screen.dart';
 import 'package:stuttgart_network/home/crm_screen.dart';
 import 'package:stuttgart_network/home/ministries_screen.dart';
-import 'package:stuttgart_network/services/auth_service.dart'; // Нужен для Выхода
+import 'package:stuttgart_network/home/events_screen.dart'; 
+import 'package:stuttgart_network/services/auth_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -12,27 +13,29 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _selectedIndex = 0; // Индекс выбранной вкладки
+  int _selectedIndex = 0;
 
-  // Экраны, которые будут отображаться
+  // Список заголовков для AppBar
+  static const List<String> _titles = [
+    'Профиль',
+    'CRM',
+    'Служения',
+    'События',
+  ];
+
+  // Список экранов
   static final List<Widget> _screens = <Widget>[
     const ProfileScreen(),
     const CrmScreen(),
     const MinistriesScreen(),
-  ];
-
-  // Заголовки для AppBar
-  static const List<String> _titles = <String>[
-    'Мой Профиль',
-    'CRM',
-    'Служения',
+    const EventsScreen(), 
   ];
 
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
     });
-    Navigator.pop(context); // Закрываем Drawer после выбора
+    Navigator.pop(context); // Закрываем Drawer
   }
 
   @override
@@ -40,24 +43,17 @@ class _HomeScreenState extends State<HomeScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      // 1. AppBar теперь здесь (а не на дочерних экранах)
       appBar: AppBar(
-        title: Text(_titles[_selectedIndex]), // 2. Заголовок меняется
+        title: Text(_titles[_selectedIndex]),
         elevation: 1,
       ),
-      
-      // 3. Добавляем само боковое меню (Drawer)
       drawer: Drawer(
         child: Column(
           children: [
-            // 4. "Красивый" заголовок меню
             UserAccountsDrawerHeader(
               accountName: const Text(
                 'Stuttgart Network',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
               ),
               accountEmail: const Text('Меню навигации'),
               currentAccountPicture: CircleAvatar(
@@ -72,12 +68,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: theme.colorScheme.primary,
               ),
             ),
-            
-            // 5. Пункты меню
             ListTile(
               leading: const Icon(Icons.person_outline),
               title: const Text('Профиль'),
-              selected: _selectedIndex == 0, // Выделяем активный пункт
+              selected: _selectedIndex == 0,
               onTap: () => _onItemTapped(0),
             ),
             ListTile(
@@ -92,9 +86,13 @@ class _HomeScreenState extends State<HomeScreen> {
               selected: _selectedIndex == 2,
               onTap: () => _onItemTapped(2),
             ),
-            
-            // 6. Разделитель и кнопка "Выйти"
-            const Spacer(), // Прижимает "Выйти" к низу
+            ListTile(
+              leading: const Icon(Icons.event_outlined),
+              title: const Text('События'),
+              selected: _selectedIndex == 3,
+              onTap: () => _onItemTapped(3),
+            ),
+            const Spacer(),
             const Divider(),
             ListTile(
               leading: Icon(Icons.logout, color: theme.colorScheme.error),
@@ -103,15 +101,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: TextStyle(color: theme.colorScheme.error),
               ),
               onTap: () {
-                Navigator.pop(context); // Сначала закрываем меню
-                AuthService().signOut(); // Затем выходим
+                Navigator.pop(context);
+                AuthService().signOut();
               },
             ),
           ],
         ),
       ),
-      
-      // 7. Тело экрана (остается как было)
       body: IndexedStack(
         index: _selectedIndex,
         children: _screens,
