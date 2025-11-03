@@ -10,17 +10,15 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  
   cupertino_icons: ^1.0.8
-
-  # --- ADDED DEPENDENCIES ---
-  supabase_flutter: ^2.5.7  # Add this line for Supabase
-  flutter_dotenv: ^5.1.0     # Add this line for .env keys
-  image_picker: ^1.1.23  # Add this line for image picking
-  dotted_border: ^2.1.0  # Для красивой кнопки "Создать" (Web)
-  uuid: ^4.4.0           # Для создания уникальных имен файлов
+  supabase_flutter: ^2.5.7
+  flutter_dotenv: ^5.1.0
+  image_picker: ^1.1.23
+  dotted_border: ^2.1.0
+  uuid: ^4.4.0
   intl: ^0.20.2
-  table_calendar: ^3.1.2  # <--- ДОБАВЬТЕ ЭТУ СТРОКУ
+  table_calendar: ^3.1.2
+
   # --------------------------
 
 dev_dependencies:
@@ -31,7 +29,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  
-  # To add assets to your application, add an assets section, like this:
+
   assets:
-    - lib/assets/.env # <--- ИСПРАВЛЕНО (появился отступ и дефис)
+    - assets/.env   # ← именно так, без lib/

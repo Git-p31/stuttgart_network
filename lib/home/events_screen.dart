@@ -1,16 +1,11 @@
 import 'dart:async';
-// import 'dart:io'; // 🛑 УДАЛЕНО
-// import 'package:flutter/foundation.dart'; // 🛑 УДАЛЕНО
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-// import 'package:image_picker/image_picker.dart'; // 🛑 УДАЛЕНО
 import 'package:stuttgart_network/services/database_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:table_calendar/table_calendar.dart'; 
-// import 'package:uuid/uuid.dart'; // 🛑 УДАЛЕНО
+import 'package:table_calendar/table_calendar.dart';
 
 final supabase = Supabase.instance.client;
-// const uuid = Uuid(); // 🛑 УДАЛЕНО
 
 class EventsScreen extends StatefulWidget {
   const EventsScreen({super.key});
@@ -22,12 +17,11 @@ class EventsScreen extends StatefulWidget {
 class _EventsScreenState extends State<EventsScreen> {
   final DatabaseService _databaseService = DatabaseService();
   bool _isAdmin = false;
-  
-  // --- Состояние Календаря ---
+
   late Future<Map<String, dynamic>> _dataFuture;
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
-  
+
   final Map<DateTime, List<Map<String, dynamic>>> _eventsCache = {};
   List<Map<String, dynamic>> _selectedEvents = [];
 
@@ -39,16 +33,13 @@ class _EventsScreenState extends State<EventsScreen> {
     _dataFuture = _loadScreenData(_selectedDay!);
   }
 
-  /// Загружает профиль + события за первый месяц
   Future<Map<String, dynamic>> _loadScreenData(DateTime month) async {
     try {
-      // Используем List<dynamic> для Future.wait
       final results = await Future.wait<dynamic>([
-        _databaseService.getMyProfile(),      // Future<Map<String, dynamic>>
-        _databaseService.getEventsForMonth(month), // Future<List<Map<String, dynamic>>>
+        _databaseService.getMyProfile(),
+        _databaseService.getEventsForMonth(month),
       ]);
 
-      // Приводим к нужным типам
       final profile = results[0] as Map<String, dynamic>;
       final events = (results[1] as List).cast<Map<String, dynamic>>();
 
@@ -62,10 +53,9 @@ class _EventsScreenState extends State<EventsScreen> {
     }
   }
 
-  /// Загружает события за НОВЫЙ месяц (при пролистывании)
   Future<void> _loadEventsForMonth(DateTime month) async {
     final monthKey = DateTime(month.year, month.month);
-    if (_eventsCache.containsKey(monthKey)) return; 
+    if (_eventsCache.containsKey(monthKey)) return;
 
     try {
       final events = await _databaseService.getEventsForMonth(month);
@@ -77,13 +67,11 @@ class _EventsScreenState extends State<EventsScreen> {
     }
   }
 
-  /// Обновляет кэш
   void _cacheEvents(DateTime month, List<Map<String, dynamic>> events) {
     final monthKey = DateTime(month.year, month.month);
     _eventsCache[monthKey] = events;
   }
 
-  /// Вызывается, когда пользователь нажимает на день
   void _onDaySelected(DateTime selectedDay, DateTime focusedDay) {
     setState(() {
       _selectedDay = selectedDay;
@@ -92,22 +80,20 @@ class _EventsScreenState extends State<EventsScreen> {
     });
   }
 
-  /// Обновляет список _selectedEvents на основе кэша
   void _updateSelectedEvents(DateTime day) {
     final monthKey = DateTime(day.year, day.month);
     final eventsForMonth = _eventsCache[monthKey] ?? [];
-    
+
     _selectedEvents = eventsForMonth.where((event) {
       final eventDate = DateTime.parse(event['starts_at']);
       return isSameDay(eventDate, day);
     }).toList();
   }
 
-  /// Получает список событий для маркеров календаря
   List<Map<String, dynamic>> _getEventsForDay(DateTime day) {
     final monthKey = DateTime(day.year, day.month);
     final eventsForMonth = _eventsCache[monthKey] ?? [];
-    
+
     return eventsForMonth.where((event) {
       final eventDate = DateTime.parse(event['starts_at']);
       return isSameDay(eventDate, day);
@@ -121,7 +107,6 @@ class _EventsScreenState extends State<EventsScreen> {
     });
   }
 
-  /// Помощник для форматирования времени (н-р, "19:00 - 21:30")
   String _formatEventTime(String startsAt, String? endsAt) {
     const ruLocale = 'ru_RU';
     final startTime = DateFormat.Hm(ruLocale).format(DateTime.parse(startsAt));
@@ -136,7 +121,6 @@ class _EventsScreenState extends State<EventsScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    // 🛑 ИСПРАВЛЕНО: УБРАН Scaffold и AppBar
     return FutureBuilder<Map<String, dynamic>>(
       future: _dataFuture,
       builder: (context, snapshot) {
@@ -144,14 +128,18 @@ class _EventsScreenState extends State<EventsScreen> {
           return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {
-          return Center(child: Text('Ошибка: ${snapshot.error}', style: TextStyle(color: theme.colorScheme.error)));
+          return Center(
+              child: Text('Ошибка: ${snapshot.error}',
+                  style: TextStyle(color: theme.colorScheme.error)));
         }
 
-        // Кнопка "Создать" (теперь плавающая)
-        final fab = _isAdmin ? FloatingActionButton(
-          onPressed: () => _showCreateEditDialog(context, preselectedDate: _selectedDay),
-          child: const Icon(Icons.add),
-        ) : null;
+        final fab = _isAdmin
+            ? FloatingActionButton(
+                onPressed: () =>
+                    _showCreateEditDialog(context, preselectedDate: _selectedDay),
+                child: const Icon(Icons.add),
+              )
+            : null;
 
         return Scaffold(
           floatingActionButton: fab,
@@ -159,12 +147,14 @@ class _EventsScreenState extends State<EventsScreen> {
             children: [
               _buildTableCalendar(theme),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                 child: Row(
                   children: [
                     Text(
                       DateFormat.yMMMMEEEEd('ru_RU').format(_selectedDay!),
-                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
                     ),
                     const Spacer(),
                   ],
@@ -184,14 +174,13 @@ class _EventsScreenState extends State<EventsScreen> {
     );
   }
 
-  /// Виджет Календаря
   Widget _buildTableCalendar(ThemeData theme) {
     return TableCalendar(
-      locale: 'ru_RU', 
+      locale: 'ru_RU',
       firstDay: DateTime.utc(2020, 1, 1),
       lastDay: DateTime.utc(2030, 12, 31),
       focusedDay: _focusedDay,
-      calendarFormat: CalendarFormat.month, 
+      calendarFormat: CalendarFormat.month,
       selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
       onDaySelected: _onDaySelected,
       onPageChanged: (focusedDay) {
@@ -235,20 +224,18 @@ class _EventsScreenState extends State<EventsScreen> {
     );
   }
 
-  /// Виджет Списка Событий
   Widget _buildEventList(ThemeData theme) {
     if (_selectedEvents.isEmpty) {
       return LayoutBuilder(
-        builder: (context, constraints) {
-          return SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: constraints.maxHeight),
-              child: const Center(child: Text('На этот день событий нет.')),
-            ),
-          );
-        }
-      );
+          builder: (context, constraints) {
+        return SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: const Center(child: Text('На этот день событий нет.')),
+          ),
+        );
+      });
     }
 
     return ListView.builder(
@@ -256,76 +243,72 @@ class _EventsScreenState extends State<EventsScreen> {
       itemCount: _selectedEvents.length,
       itemBuilder: (context, index) {
         final event = _selectedEvents[index];
-        // final imageUrl = event['image_url']; // 🛑 УДАЛЕНО
 
         return Card(
           margin: const EdgeInsets.only(bottom: 12.0),
           clipBehavior: Clip.hardEdge,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 🛑 БЛОК С ФОТО ПОЛНОСТЬЮ УДАЛЕН
-              
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _formatEventTime(event['starts_at'], event['ends_at']),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.secondary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      event['title'] ?? 'Без названия',
-                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    if (event['location'] != null && event['location'].isNotEmpty) ...[ 
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Icon(Icons.location_on_outlined, size: 16, color: theme.colorScheme.onSurfaceVariant),
-                          const SizedBox(width: 8),
-                          Expanded( // ✅ Добавлено, чтобы текст переносился
-                            child: Text(
-                              event['location'],
-                              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                            ),
-                          ),
-                        ],
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _formatEventTime(event['starts_at'], event['ends_at']),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.secondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  event['title'] ?? 'Без названия',
+                  style: theme.textTheme.titleLarge
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                if (event['location'] != null && event['location'].isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(Icons.location_on_outlined,
+                          size: 16, color: theme.colorScheme.onSurfaceVariant),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          event['location'],
+                          style: theme.textTheme.bodyMedium
+                              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        ),
                       ),
                     ],
-                    const SizedBox(height: 8),
-                    Text(event['description'] ?? 'Нет описания.', style: theme.textTheme.bodyMedium),
-                    
-                    if (_isAdmin)
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          IconButton(
-                            icon: Icon(Icons.edit_outlined, color: theme.colorScheme.primary),
-                            onPressed: () => _showCreateEditDialog(context, event: event), 
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.delete_outline, color: theme.colorScheme.error),
-                            onPressed: () => _showDeleteDialog(event['id']),
-                          ),
-                        ],
-                      )
-                  ],
-                ),
-              )
-            ],
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Text(event['description'] ?? 'Нет описания.',
+                    style: theme.textTheme.bodyMedium),
+                if (_isAdmin)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      IconButton(
+                        icon:
+                            Icon(Icons.edit_outlined, color: theme.colorScheme.primary),
+                        onPressed: () => _showCreateEditDialog(context, event: event),
+                      ),
+                      IconButton(
+                        icon:
+                            Icon(Icons.delete_outline, color: theme.colorScheme.error),
+                        onPressed: () => _showDeleteDialog(event['id']),
+                      ),
+                    ],
+                  )
+              ],
+            ),
           ),
         );
       },
     );
   }
 
-  /// Диалог подтверждения удаления (без изменений)
   void _showDeleteDialog(String eventId) {
     showDialog(
       context: context,
@@ -356,12 +339,11 @@ class _EventsScreenState extends State<EventsScreen> {
     );
   }
 
-  /// --- Диалог создания/редактирования события (без фото) ---
   void _showCreateEditDialog(BuildContext context, {Map<String, dynamic>? event, DateTime? preselectedDate}) {
-    final bool isEditMode = event != null; 
+    final bool isEditMode = event != null;
     final theme = Theme.of(context);
     final formKey = GlobalKey<FormState>();
-    
+
     final titleController = TextEditingController(text: event?['title']);
     final descriptionController = TextEditingController(text: event?['description']);
     final locationController = TextEditingController(text: event?['location']);
@@ -369,15 +351,15 @@ class _EventsScreenState extends State<EventsScreen> {
     DateTime pickedDate = preselectedDate ?? (event != null ? DateTime.parse(event['starts_at']) : _selectedDay ?? DateTime.now());
     TimeOfDay? pickedStartTime = event != null ? TimeOfDay.fromDateTime(DateTime.parse(event['starts_at'])) : null;
     TimeOfDay? pickedEndTime = event != null && event['ends_at'] != null ? TimeOfDay.fromDateTime(DateTime.parse(event['ends_at'])) : null;
-    // 🛑 Логика Фото - УДАЛЕНА
+
     bool isLoading = false;
 
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true, 
+      isScrollControlled: true,
       builder: (ctx) {
         return StatefulBuilder(builder: (dialogContext, setDialogState) {
-          
+
           Future<void> pickTime(bool isStart) async {
             final initialTime = (isStart ? pickedStartTime : pickedEndTime) ?? TimeOfDay.now();
             final time = await showTimePicker(context: context, initialTime: initialTime);
@@ -390,8 +372,6 @@ class _EventsScreenState extends State<EventsScreen> {
               }
             });
           }
-
-          // 🛑 Функция pickImage() - УДАЛЕНА
 
           Future<void> handleSave() async {
             final user = supabase.auth.currentUser;
@@ -412,14 +392,11 @@ class _EventsScreenState extends State<EventsScreen> {
 
             setDialogState(() => isLoading = true);
             try {
-              // 🛑 Логика Загрузки Фото - УДАЛЕНА
-              
-              // 2️⃣ Формируем даты
               final startsAt = DateTime(
                 pickedDate.year, pickedDate.month, pickedDate.day,
                 pickedStartTime!.hour, pickedStartTime!.minute,
               );
-              
+
               DateTime? endsAt;
               if (pickedEndTime != null) {
                  endsAt = DateTime(
@@ -428,7 +405,6 @@ class _EventsScreenState extends State<EventsScreen> {
                 );
               }
 
-              // 3️⃣ Подготавливаем данные
               final eventData = {
                 'title': titleController.text,
                 'description': descriptionController.text,
@@ -437,7 +413,6 @@ class _EventsScreenState extends State<EventsScreen> {
                 'created_by': user.id,
               };
 
-              // 4️⃣ Вставка или обновление
               if (isEditMode) {
                 await supabase.from('events').update(eventData).eq('id', event['id']);
               } else {
@@ -458,7 +433,6 @@ class _EventsScreenState extends State<EventsScreen> {
             }
           }
 
-          // --- UI Диалога ---
           return Padding(
             padding: EdgeInsets.only(
               bottom: MediaQuery.of(dialogContext).viewInsets.bottom,
@@ -474,7 +448,6 @@ class _EventsScreenState extends State<EventsScreen> {
                     Text(isEditMode ? 'Редактировать событие' : 'Новое событие', style: theme.textTheme.headlineSmall),
                     Text('на ${DateFormat.yMMMMEEEEd('ru_RU').format(pickedDate)}', style: theme.textTheme.titleMedium),
                     const SizedBox(height: 24),
-                    
                     TextFormField(
                       controller: titleController,
                       decoration: const InputDecoration(labelText: 'Название'),
@@ -492,8 +465,6 @@ class _EventsScreenState extends State<EventsScreen> {
                       maxLines: 4,
                     ),
                     const SizedBox(height: 24),
-                    
-                    // --- Выбор Времени ---
                     Row(
                       children: [
                         Expanded(
@@ -519,11 +490,7 @@ class _EventsScreenState extends State<EventsScreen> {
                         ),
                       ],
                     ),
-                    
-                    // 🛑 БЛОК ВЫБОРА ФОТО УДАЛЕН
-                    
                     const SizedBox(height: 32),
-                    
                     isLoading
                         ? const Center(child: CircularProgressIndicator())
                         : ElevatedButton.icon(
@@ -543,4 +510,3 @@ class _EventsScreenState extends State<EventsScreen> {
     );
   }
 }
-
