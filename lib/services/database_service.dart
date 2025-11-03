@@ -27,7 +27,7 @@ class DatabaseService {
     }
   }
 
-  /// Получает все профили (для CRM)
+  /// Получает все профили (для CRM и выбора Лидера)
   Future<List<Map<String, dynamic>>> getCrmProfiles() async {
     try {
       final data = await supabase
@@ -43,6 +43,7 @@ class DatabaseService {
 
   // ---------------- MINISTRIES ----------------
 
+  /// ✅ ОБНОВЛЕНО: Добавлен 'image_url'
   Future<List<Map<String, dynamic>>> getMinistries() async {
     try {
       final data = await supabase
@@ -98,7 +99,8 @@ class DatabaseService {
   }
 
   // ---------------- WORKSHOPS ----------------
-
+  
+  /// ✅ ОБНОВЛЕНО: Загружает все новые поля (лидер, фото, теги, даты)
   Future<List<Map<String, dynamic>>> getWorkshops() async {
     try {
       final data = await supabase
@@ -107,10 +109,17 @@ class DatabaseService {
             id,
             title,
             description,
-            speaker,
             start_date,
+            end_date,
+            max_participants,
+            image_url, 
+            tags,
             workshop_members (
               user_id
+            ),
+            leader:leader_id (
+              id,
+              full_name
             )
           ''')
           .order('start_date', ascending: true);
@@ -149,29 +158,14 @@ class DatabaseService {
 
   // ---------------- EVENTS ----------------
 
-  /// Загружает все события начиная с 1-го числа текущего месяца
-  Future<List<Map<String, dynamic>>> getUpcomingEvents() async {
-    try {
-      final now = DateTime.now();
-      final startOfMonth = DateTime(now.year, now.month, 1).toIso8601String();
+  // 🛑 'getUpcomingEvents()' УДАЛЕНА, так как она была с багом и не используется.
 
-      final data = await supabase
-          .from('events')
-          .select()
-          .gte('starts_at', startOfMonth)
-          .order('starts_at', ascending: true);
-
-      return (data as List).cast<Map<String, dynamic>>();
-    } on PostgrestException catch (e) {
-      debugPrint('DatabaseService (getUpcomingEvents) Error: ${e.message}');
-      rethrow;
-    }
-  }
-
-  /// Получает события для конкретного месяца
+  /// ✅ Эта функция используется экраном Календаря
   Future<List<Map<String, dynamic>>> getEventsForMonth(DateTime month) async {
     try {
+      // 1-е число месяца (00:00)
       final firstDay = DateTime(month.year, month.month, 1);
+      // Последний день месяца (23:59:59)
       final lastDay = DateTime(month.year, month.month + 1, 0, 23, 59, 59);
 
       final data = await supabase
@@ -188,3 +182,4 @@ class DatabaseService {
     }
   }
 }
+

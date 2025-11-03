@@ -17,7 +17,6 @@ dependencies:
   supabase_flutter: ^2.5.7  # Add this line for Supabase
   flutter_dotenv: ^5.1.0     # Add this line for .env keys
   image_picker: ^1.1.23  # Add this line for image picking
-  permission_handler: ^10.4.0 # Add this line for handling permissions
   dotted_border: ^2.1.0  # Для красивой кнопки "Создать" (Web)
   uuid: ^4.4.0           # Для создания уникальных имен файлов
   intl: ^0.20.2
