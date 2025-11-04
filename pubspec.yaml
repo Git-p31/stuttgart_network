@@ -1,6 +1,6 @@
 name: stuttgart_network
 description: "A new Flutter project."
-publish_to: 'none' 
+publish_to: 'none'
 
 version: 1.0.0+1
 
@@ -10,25 +10,24 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+
   cupertino_icons: ^1.0.8
   supabase_flutter: ^2.5.7
   flutter_dotenv: ^5.1.0
-  image_picker: ^1.1.23
+  image_picker: ^1.1.2
   dotted_border: ^2.1.0
   uuid: ^4.4.0
   intl: ^0.20.2
   table_calendar: ^3.1.2
-
-  # --------------------------
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  
   flutter_lints: ^4.0.0
 
 flutter:
   uses-material-design: true
 
   assets:
-    - assets/.env   # ← именно так, без lib/
+    - assets/.env

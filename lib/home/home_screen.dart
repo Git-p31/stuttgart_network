@@ -3,6 +3,7 @@ import 'package:stuttgart_network/home/profile_screen.dart';
 import 'package:stuttgart_network/home/ministries_screen.dart';
 import 'package:stuttgart_network/home/events_screen.dart';
 import 'package:stuttgart_network/home/workshops_screen.dart';
+import 'package:stuttgart_network/home/marketplace_screen.dart'; // ✅ Добавлен импорт
 import 'package:stuttgart_network/services/auth_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -22,6 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
     'Служения',
     'События',
     'Воркшопы',
+    'Маркетплейс', // ✅ Добавлен заголовок
   ];
 
   // Список экранов
@@ -31,6 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const MinistriesScreen(),
     const EventsScreen(),
     const WorkshopsScreen(),
+    const MarketplaceScreen(), // ✅ Добавлен экран
   ];
 
   // Список пунктов меню для Drawer
@@ -45,6 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _MenuItem(icon: Icons.hub_outlined, title: 'Служения', index: 2),
       _MenuItem(icon: Icons.event_outlined, title: 'События', index: 3),
       _MenuItem(icon: Icons.school_outlined, title: 'Воркшопы', index: 4),
+      _MenuItem(icon: Icons.storefront, title: 'Маркетплейс', index: 5), // ✅ Добавлен пункт меню
     ]);
   }
 
