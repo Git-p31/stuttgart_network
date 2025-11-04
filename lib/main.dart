@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
+// --- Добавлен импорт foundation для kIsWeb ---
+import 'package:flutter/foundation.dart';
 
-// --- ИМПОРТЫ --- 
+// --- ИМПОРТЫ ---
 import 'package:stuttgart_network/services/auth_service.dart';
 import 'package:stuttgart_network/auth/auth_screen.dart';
 import 'package:stuttgart_network/home/home_screen.dart';
@@ -11,15 +13,28 @@ import 'package:stuttgart_network/home/home_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Загружаем .env из папки assets
-  await dotenv.load(fileName: "assets/.env");
+  String supabaseUrl;
+  String supabaseAnonKey;
+
+  if (kIsWeb) {
+    // --- Настройки для веба ---
+    // ВНИМАНИЕ: замените на свои реальные значения из Supabase Dashboard
+    supabaseUrl = 'https://ylhanfsytvhpjqilolwe.supabase.co';
+    supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlsaGFuZnN5dHZocGpxaWxvbHdlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE5MTk3NDEsImV4cCI6MjA3NzQ5NTc0MX0.0KsQsZ8kiad-RT7kjcj0ufX_gnkW3pF2zZ55nBIrPgw';
+  } else {
+    // --- Настройки для Android / iOS ---
+    // Убедитесь, что файл .env находится в папке assets/ и прописан в pubspec.yaml
+    await dotenv.load(fileName: "assets/.env");
+    supabaseUrl = dotenv.env['SUPABASE_URL']!;
+    supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY']!;
+  }
 
   await initializeDateFormatting('ru_RU', null);
 
   // --- ИНИЦИАЛИЗАЦИЯ SUPABASE ---
   await Supabase.initialize(
-    url: dotenv.env['SUPABASE_URL']!,
-    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
+    url: supabaseUrl,
+    anonKey: supabaseAnonKey,
   );
 
   runApp(const MyApp());
