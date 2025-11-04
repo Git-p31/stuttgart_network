@@ -1,4 +1,3 @@
-// lib/screens/workshop_detail_screen.dart
 import 'package:flutter/material.dart';
 import 'package:stuttgart_network/services/database_service.dart';
 
@@ -27,16 +26,21 @@ class _WorkshopDetailScreenState extends State<WorkshopDetailScreen> {
   @override
   void initState() {
     super.initState();
+    // Получаем участников из переданного объекта workshop
+    // Важно: убедитесь, что в DatabaseService.getWorkshops() вы загружаете profiles
     _members = List<Map<String, dynamic>>.from(widget.workshop['workshop_members'] ?? []);
     _isMember = _members.any((m) => m['user_id'] == widget.currentUserId);
   }
 
   Future<void> _toggleRegistration() async {
+    if (_isLoading) return; // Защита от двойного нажатия
+
     setState(() => _isLoading = true);
     final workshopId = widget.workshop['id'];
 
     try {
       if (_isMember) {
+        // Покинуть
         await _databaseService.unregisterFromWorkshop(workshopId);
         _members.removeWhere((m) => m['user_id'] == widget.currentUserId);
         if (mounted) {
@@ -45,10 +49,13 @@ class _WorkshopDetailScreenState extends State<WorkshopDetailScreen> {
           );
         }
       } else {
+        // Присоединиться
         await _databaseService.registerForWorkshop(workshopId);
+        // Добавляем текущего пользователя в список участников
         _members.add({
           'user_id': widget.currentUserId,
-          'profiles': null, // пока без профиля — обновится при полной перезагрузке
+          // 'profiles' будет null, но отображение обновится при перезагрузке
+          // Однако, если вы хотите показать "Вы", логику можно добавить в отображение
         });
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -56,6 +63,7 @@ class _WorkshopDetailScreenState extends State<WorkshopDetailScreen> {
           );
         }
       }
+      // Обновляем состояние участника
       _isMember = _members.any((m) => m['user_id'] == widget.currentUserId);
     } catch (e) {
       if (mounted) {
@@ -68,62 +76,63 @@ class _WorkshopDetailScreenState extends State<WorkshopDetailScreen> {
     }
   }
 
-Future<void> _deleteWorkshop() async {
-  final confirm = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Удалить воркшоп?'),
-      content: const Text('Это действие нельзя отменить. Все участники потеряют доступ.'),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, true),
-          child: const Text('Удалить', style: TextStyle(color: Colors.red)),
-        ),
-      ],
-    ),
-  );
+  Future<void> _deleteWorkshop() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Удалить воркшоп?'),
+        content: const Text('Это действие нельзя отменить. Все участники потеряют доступ.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Удалить', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
 
-  if (confirm == true) {
-    try {
-      // ⚠️ Сначала удаляем связи из workshop_members
-      await supabase.from('workshop_members').delete().eq('workshop_id', widget.workshop['id']);
+    if (confirm == true) {
+      try {
+        // ⚠️ Сначала удаляем связи из workshop_members
+        await _databaseService.deleteWorkshop(widget.workshop['id']); // Лучше вызывать из DatabaseService
 
-      // ⚠️ Затем удаляем сам воркшоп
-      await supabase.from('workshops').delete().eq('id', widget.workshop['id']).select().single();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Воркшоп успешно удалён'), backgroundColor: Colors.green),
-        );
-        // ✅ Отправляем сигнал родителю (WorkshopsScreen) обновиться
-        Navigator.pop(context, true);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка удаления: $e'), backgroundColor: Colors.red),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Воркшоп успешно удалён'), backgroundColor: Colors.green),
+          );
+          // ✅ Отправляем сигнал родителю (WorkshopsScreen) обновиться
+          Navigator.pop(context, true);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Ошибка удаления: $e'), backgroundColor: Colors.red),
+          );
+        }
       }
     }
   }
-}
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final imageUrl = widget.workshop['image_url'];
-    final title = widget.workshop['title'] ?? 'Без названия';
-    final description = widget.workshop['description'] ?? 'Нет описания.';
-    final maxParticipants = widget.workshop['max_participants'] ?? 50;
+    final workshop = widget.workshop; // Для удобства
+
+    // Извлекаем данные из workshop
+    final imageUrl = workshop['image_url'];
+    final title = workshop['title'] ?? 'Без названия';
+    final description = workshop['description'] ?? 'Нет описания.';
+    final maxParticipants = workshop['max_participants'] ?? 50;
     final isFull = _members.length >= maxParticipants;
 
-    // Лидер: ищем по `leader_id` или по профилю с ролью (если структура такая)
-    final leaderProfile = widget.workshop['leader'];
+    // Лидер: уже вложен в workshop
+    final leaderProfile = workshop['leader'];
     final leaderName = leaderProfile?['full_name'] ?? 'Не назначен';
 
     // Расписание
-    final schedule = widget.workshop['recurring_schedule'] ?? '—';
-    final time = widget.workshop['recurring_time'] ?? '—';
+    final schedule = workshop['recurring_schedule'] ?? '—';
+    final time = workshop['recurring_time'] ?? '—';
 
     return Scaffold(
       body: CustomScrollView(
@@ -244,17 +253,24 @@ Future<void> _deleteWorkshop() async {
                         margin: EdgeInsets.zero,
                         child: ListView.builder(
                           shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
+                          physics: const NeverScrollableScrollPhysics(), // Важно для встраивания в SliverList
                           itemCount: _members.length,
                           itemBuilder: (context, index) {
                             final member = _members[index];
-                            final profile = member['user_profile'] ?? member['profiles'];
-                            final name = profile?['full_name'] ?? (member['user_id'] == widget.currentUserId ? 'Вы' : 'Загрузка...');
+                            // ✅ Используем profiles из вложенного объекта
+                            final profile = member['profiles'];
+                            final userId = member['user_id'];
+                            // Проверяем, текущий ли это пользователь
+                            final isCurrentUser = userId == widget.currentUserId;
+                            // Берём имя из профиля, или "Вы", или "Неизвестный"
+                            final name = profile?['full_name'] ?? (isCurrentUser ? 'Вы' : 'Неизвестный');
                             final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
 
                             return ListTile(
                               leading: CircleAvatar(child: Text(initial)),
                               title: Text(name),
+                              // Дополнительно: можно добавить подзаголовок с телефоном из профиля
+                              // subtitle: profile != null ? Text(profile['phone'] ?? '') : null,
                             );
                           },
                         ),
