@@ -19,19 +19,61 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   final ImagePicker _picker = ImagePicker();
   bool _isAdmin = false;
   List<Map<String, dynamic>> _items = [];
+  List<Map<String, dynamic>> _filteredItems = [];
   bool _isLoading = true;
+
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  String _filterType = 'Все';
 
   @override
   void initState() {
     super.initState();
     _loadItems();
     _checkIfAdmin();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    final query = _searchController.text.toLowerCase();
+    if (query != _searchQuery) {
+      setState(() => _searchQuery = query);
+      _applyFilters();
+    }
+  }
+
+  void _applyFilters() {
+    List<Map<String, dynamic>> results = List.from(_items);
+
+    if (_filterType != 'Все') {
+      results = results.where((item) {
+        if (_filterType == 'Товар') return !item['is_service'];
+        if (_filterType == 'Услуга') return item['is_service'];
+        return true;
+      }).toList();
+    }
+
+    if (_searchQuery.isNotEmpty) {
+      results = results.where((item) {
+        final title = (item['title'] ?? '').toString().toLowerCase();
+        final desc = (item['description'] ?? '').toString().toLowerCase();
+        return title.contains(_searchQuery) || desc.contains(_searchQuery);
+      }).toList();
+    }
+
+    setState(() => _filteredItems = results);
   }
 
   Future<void> _checkIfAdmin() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
-
     try {
       final profile = await supabase
           .from('profiles')
@@ -40,9 +82,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           .maybeSingle();
 
       if (mounted && profile != null) {
-        setState(() {
-          _isAdmin = profile['role'] == 'admin';
-        });
+        setState(() => _isAdmin = profile['role'] == 'admin');
       }
     } catch (e) {
       debugPrint('Ошибка проверки админа: $e');
@@ -50,6 +90,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   }
 
   Future<void> _loadItems() async {
+    setState(() => _isLoading = true);
     try {
       final data = await supabase
           .from('marketplace')
@@ -58,6 +99,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
       setState(() {
         _items = (data as List).cast<Map<String, dynamic>>();
+        _filteredItems = List.from(_items);
         _isLoading = false;
       });
     } catch (e) {
@@ -67,9 +109,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           SnackBar(content: Text('Ошибка загрузки: $e')),
         );
       }
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
@@ -98,8 +138,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     if (image != null) {
       try {
         final fileName = '${uuid.v4()}_${image.name}';
-
-        // upload() возвращает строку пути (String), без .path
         final uploadPath = await supabase.storage
             .from('marketplace_images')
             .upload(fileName, File(image.path));
@@ -132,10 +170,14 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         'is_service': isService,
       });
 
-      if (mounted) {
-        Navigator.pop(context); // закрыть окно
-        _loadItems(); // обновить список
-      }
+      if (!mounted) return;
+
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Объявление успешно добавлено!')),
+      );
+
+      _loadItems();
     } catch (e) {
       debugPrint('Ошибка добавления товара: $e');
       if (mounted) {
@@ -174,10 +216,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
-      // ignore: use_build_context_synchronously
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось открыть контакт: $contact')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Не удалось открыть контакт: $contact')),
+        );
+      }
     }
   }
 
@@ -192,6 +235,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      shape: RoundedRectangleBorder( // <-- ИСПРАВЛЕНО: 'const' убран
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
@@ -207,72 +253,132 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    const Align( // <-- ИСПРАВЛЕНО: 'const' добавлены
+                      alignment: Alignment.center,
+                      child: const SizedBox(
+                        width: 40,
+                        height: 4,
+                        child: const DecoratedBox(
+                          decoration: const BoxDecoration(
+                            color: Colors.grey,
+                            borderRadius:
+                                const BorderRadius.all(Radius.circular(2)),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
                     const Text(
                       'Добавить товар или услугу',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      style:
+                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 20),
                     TextField(
                       controller: titleController,
-                      decoration: const InputDecoration(labelText: 'Название *'),
+                      decoration: const InputDecoration(
+                        labelText: 'Название *',
+                        border: OutlineInputBorder(),
+                      ),
                     ),
                     const SizedBox(height: 10),
                     TextField(
                       controller: descriptionController,
-                      decoration: const InputDecoration(labelText: 'Описание'),
-                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Описание',
+                        border: OutlineInputBorder(),
+                        alignLabelWithHint: true,
+                      ),
+                      minLines: 3,
+                      maxLines: 6,
                     ),
                     const SizedBox(height: 10),
                     TextField(
                       controller: contactController,
-                      decoration:
-                          const InputDecoration(labelText: 'Контакт (телефон или @telegram) *'),
+                      decoration: const InputDecoration(
+                        labelText: 'Контакт (телефон или @telegram) *',
+                        border: OutlineInputBorder(),
+                      ),
                     ),
                     const SizedBox(height: 10),
                     TextField(
                       controller: priceController,
                       decoration: const InputDecoration(
-                          labelText: 'Цена (введите число или оставьте пустым)'),
+                        labelText: 'Цена (введите число или оставьте пустым)',
+                        border: OutlineInputBorder(),
+                      ),
                       keyboardType: TextInputType.number,
                     ),
                     const SizedBox(height: 10),
                     SwitchListTile(
-                      title: const Text('Это услуга (без цены по умолчанию)'),
+                      title: const Text('Это услуга'),
                       value: isService,
-                      onChanged: (val) => setDialogState(() => isService = val),
+                      onChanged: (val) =>
+                          setDialogState(() => isService = val),
                     ),
                     const SizedBox(height: 10),
                     ElevatedButton.icon(
                       onPressed: () async {
-                        final picked = await _picker.pickImage(source: ImageSource.gallery);
+                        final picked =
+                            await _picker.pickImage(source: ImageSource.gallery);
                         if (picked != null) {
                           setDialogState(() => image = picked);
                         }
                       },
-                      icon: const Icon(Icons.image),
+                      icon: const Icon(Icons.image_outlined),
                       label: const Text('Выбрать фото'),
                     ),
                     if (image != null) ...[
                       const SizedBox(height: 10),
-                      Image.file(File(image!.path), height: 100),
+                      AspectRatio(
+                        aspectRatio: 1,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.file(File(image!.path),
+                              fit: BoxFit.cover),
+                        ),
+                      ),
                     ],
                     const SizedBox(height: 20),
                     ElevatedButton(
                       onPressed: () async {
-                        final price = priceController.text.isNotEmpty
-                            ? double.tryParse(priceController.text)
-                            : null;
+                        final title = titleController.text.trim();
+                        final description = descriptionController.text.trim();
+                        final contact = contactController.text.trim();
+                        final priceText = priceController.text.trim();
+
+                        if (title.isEmpty || contact.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Название и контакт обязательны.'),
+                              backgroundColor: Colors.orange,
+                            ),
+                          );
+                          return;
+                        }
+
+                        final price = priceText.isNotEmpty
+                            ? double.tryParse(priceText)
+                            : (isService ? null : 0.0);
 
                         await _addItem(
-                          title: titleController.text,
-                          description: descriptionController.text,
-                          contactInfo: contactController.text,
+                          title: title,
+                          description: description,
+                          contactInfo: contact,
                           price: price,
                           isService: isService,
                           image: image,
                         );
                       },
-                      child: const Text('Добавить'),
+                      style: ElevatedButton.styleFrom(
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text('Добавить',
+                          style: TextStyle(fontSize: 16)),
                     ),
                     const SizedBox(height: 20),
                   ],
@@ -288,104 +394,216 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Маркетплейс'),
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: (String value) {
+              setState(() => _filterType = value);
+              _applyFilters();
+            },
+            itemBuilder: (BuildContext context) => const [
+              PopupMenuItem(value: 'Все', child: Text('Все')),
+              PopupMenuItem(value: 'Товар', child: Text('Только товары')),
+              PopupMenuItem(value: 'Услуга', child: Text('Только услуги')),
+            ],
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddItemDialog,
         child: const Icon(Icons.add),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _items.isEmpty
-              ? const Center(child: Text('Пока нет товаров или услуг.'))
-              : RefreshIndicator(
-                  onRefresh: _loadItems,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _items.length,
-                    itemBuilder: (context, index) {
-                      final item = _items[index];
-                      final isMyItem = item['user_id'] == supabase.auth.currentUser?.id;
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Поиск по названию или описанию...',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  borderSide: BorderSide.none,
+                ),
+                filled: true,
+                fillColor: isDark ? Colors.grey[800] : Colors.grey[200],
+              ),
+            ),
+          ),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _filteredItems.isEmpty
+                    ? const Center(child: Text('Нет объявлений'))
+                    : RefreshIndicator(
+                        onRefresh: _loadItems,
+                        child: GridView.builder(
+                          padding: const EdgeInsets.all(12),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            mainAxisSpacing: 12,
+                            crossAxisSpacing: 12,
+                            childAspectRatio: 0.75,
+                          ),
+                          itemCount: _filteredItems.length,
+                          itemBuilder: (context, index) {
+                            final item = _filteredItems[index];
+                            final isMyItem =
+                                item['user_id'] == supabase.auth.currentUser?.id;
+                            final typeColor = item['is_service']
+                                ? Colors.orange
+                                : Colors.green;
 
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (item['image_url'] != null)
-                              ClipRRect(
-                                borderRadius:
-                                    const BorderRadius.vertical(top: Radius.circular(8)),
-                                child: Image.network(
-                                  item['image_url'],
-                                  fit: BoxFit.cover,
-                                  height: 200,
-                                  width: double.infinity,
+                            return GestureDetector(
+                              onTap: () =>
+                                  _launchContact(item['contact_info']),
+                              child: Card(
+                                elevation: 3,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
-                              ),
-                            Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    item['title'],
-                                    style: theme.textTheme.titleLarge
-                                        ?.copyWith(fontWeight: FontWeight.bold),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  if (item['price'] != null) ...[
-                                    Text(
-                                      'Цена: ${item['price']} €',
-                                      style: theme.textTheme.titleMedium
-                                          ?.copyWith(color: Colors.green),
-                                    ),
-                                    const SizedBox(height: 8),
-                                  ],
-                                  Text(
-                                    item['description'] ?? 'Нет описания',
-                                    style: theme.textTheme.bodyMedium,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  GestureDetector(
-                                    onTap: () => _launchContact(item['contact_info']),
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.phone, size: 16),
-                                        const SizedBox(width: 4),
-                                        Expanded(
-                                          child: Text(
-                                            'Связаться: ${item['contact_info']}',
-                                            style: theme.textTheme.bodyMedium?.copyWith(
-                                              color: Colors.blue,
-                                              decoration: TextDecoration.underline,
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      // --- [НАЧАЛО] ИСПРАВЛЕННЫЙ БЛОК ---
+                                      if (item['image_url'] != null)
+                                        AspectRatio(
+                                          aspectRatio: 1.3,
+                                          child: Image.network(
+                                            item['image_url'],
+                                            fit: BoxFit.cover,
+                                            width: double.infinity,
+                                            errorBuilder: (_, __, ___) => const Icon(
+                                              Icons.broken_image,
+                                              size: 40,
+                                              color: Colors.grey,
                                             ),
                                           ),
+                                        )
+                                      else
+                                        // Ваша новая логика плейсхолдера
+                                        AspectRatio(
+                                          aspectRatio: 1.3,
+                                          child: item['is_service']
+                                              ? Image.asset(
+                                                  'assets/images/maxresdefault.jpg', // путь к твоей фотке
+                                                  fit: BoxFit.cover,
+                                                  width: double.infinity,
+                                                )
+                                              : Container(
+                                                  color: Colors.grey[300],
+                                                  child: const Icon(
+                                                    Icons.shopping_bag_outlined,
+                                                    size: 40,
+                                                    color: Colors.grey,
+                                                  ),
+                                                ),
                                         ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (_isAdmin || isMyItem)
-                                    Align(
-                                      alignment: Alignment.centerRight,
-                                      child: IconButton(
-                                        icon: const Icon(Icons.delete, color: Colors.red),
-                                        onPressed: () =>
-                                            _deleteItem(item['id'].toString()),
+                                      // --- [КОНЕЦ] ИСПРАВЛЕННОГО БЛОКА ---
+                                      // Лишний 'else' и старый 'Container' были удалены
+                                      
+                                      Padding(
+                                        padding: const EdgeInsets.all(8),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              item['title'],
+                                              style: const TextStyle(
+                                                fontWeight:
+                                                    FontWeight.bold,
+                                                fontSize: 14,
+                                              ),
+                                              maxLines: 2,
+                                              overflow:
+                                                  TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 4),
+                                            if (item['price'] != null)
+                                              Text(
+                                                '${item['price']} €',
+                                                style: TextStyle(
+                                                  color: typeColor,
+                                                  fontWeight:
+                                                      FontWeight.w600,
+                                                ),
+                                              ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              item['description'] ??
+                                                  'Нет описания',
+                                              style: TextStyle(
+                                                color: Colors.grey[600],
+                                                fontSize: 12,
+                                              ),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Row(
+                                              children: [
+                                                Icon(
+                                                  item['is_service']
+                                                      ? Icons
+                                                          .construction_outlined
+                                                      : Icons
+                                                          .shopping_bag_outlined,
+                                                  color: typeColor,
+                                                  size: 14,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  item['is_service']
+                                                      ? 'Услуга'
+                                                      : 'Товар',
+                                                  style: TextStyle(
+                                                    color: typeColor,
+                                                    fontSize: 12,
+                                                    fontWeight:
+                                                        FontWeight.w500,
+                                                  ),
+                                                ),
+                                                const Spacer(),
+                                                if (_isAdmin || isMyItem)
+                                                  IconButton(
+                                                    icon: const Icon(
+                                                        Icons.delete,
+                                                        color: Colors.red,
+                                                        size: 18),
+                                                    padding: EdgeInsets.zero,
+                                                    constraints:
+                                                        const BoxConstraints(),
+                                                    onPressed: () =>
+                                                        _deleteItem(
+                                                            item['id']
+                                                                .toString()),
+                                                  ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                ],
+                                    ],
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
-                ),
+                      ),
+            ),
+        ],
+      ),
     );
   }
 }
