@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/foundation.dart'; // для kIsWeb
 
 final supabase = Supabase.instance.client;
 const uuid = Uuid();
@@ -135,16 +136,40 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     }
 
     String? imageUrl;
+
     if (image != null) {
       try {
-        final fileName = '${uuid.v4()}_${image.name}';
-        final uploadPath = await supabase.storage
-            .from('marketplace_images')
-            .upload(fileName, File(image.path));
+        const bucketName = 'marketplace_images';
+        final buckets = await supabase.storage.listBuckets();
+        if (!buckets.any((b) => b.name == bucketName)) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                    'Bucket "$bucketName" не найден. Создайте его в Supabase Storage.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
 
-        imageUrl = supabase.storage
-            .from('marketplace_images')
-            .getPublicUrl(uploadPath);
+        final fileName = '${uuid.v4()}_${image.name}';
+
+        if (kIsWeb) {
+          final bytes = await image.readAsBytes();
+          await supabase.storage
+              .from(bucketName)
+              .uploadBinary(fileName, bytes,
+                  fileOptions: FileOptions(contentType: image.mimeType));
+        } else {
+          await supabase.storage
+              .from(bucketName)
+              .upload(fileName, File(image.path),
+                  fileOptions: FileOptions(contentType: image.mimeType));
+        }
+
+        imageUrl = supabase.storage.from(bucketName).getPublicUrl(fileName);
       } catch (e) {
         debugPrint('Ошибка загрузки изображения: $e');
         if (mounted) {
@@ -235,7 +260,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: RoundedRectangleBorder( // <-- ИСПРАВЛЕНО: 'const' убран
+      shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
@@ -253,16 +278,15 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Align( // <-- ИСПРАВЛЕНО: 'const' добавлены
+                    const Align(
                       alignment: Alignment.center,
-                      child: const SizedBox(
+                      child: SizedBox(
                         width: 40,
                         height: 4,
-                        child: const DecoratedBox(
-                          decoration: const BoxDecoration(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
                             color: Colors.grey,
-                            borderRadius:
-                                const BorderRadius.all(Radius.circular(2)),
+                            borderRadius: BorderRadius.all(Radius.circular(2)),
                           ),
                         ),
                       ),
@@ -313,14 +337,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     SwitchListTile(
                       title: const Text('Это услуга'),
                       value: isService,
-                      onChanged: (val) =>
-                          setDialogState(() => isService = val),
+                      onChanged: (val) => setDialogState(() => isService = val),
                     ),
                     const SizedBox(height: 10),
                     ElevatedButton.icon(
                       onPressed: () async {
-                        final picked =
-                            await _picker.pickImage(source: ImageSource.gallery);
+                        final picked = await _picker.pickImage(
+                            source: ImageSource.gallery);
                         if (picked != null) {
                           setDialogState(() => image = picked);
                         }
@@ -334,8 +357,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                         aspectRatio: 1,
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: Image.file(File(image!.path),
-                              fit: BoxFit.cover),
+                          child:
+                              Image.file(File(image!.path), fit: BoxFit.cover),
                         ),
                       ),
                     ],
@@ -350,7 +373,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                         if (title.isEmpty || contact.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Название и контакт обязательны.'),
+                              content: Text(
+                                  'Название и контакт обязательны.'),
                               backgroundColor: Colors.orange,
                             ),
                           );
@@ -371,14 +395,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                         );
                       },
                       style: ElevatedButton.styleFrom(
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 16),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      child: const Text('Добавить',
-                          style: TextStyle(fontSize: 16)),
+                      child:
+                          const Text('Добавить', style: TextStyle(fontSize: 16)),
                     ),
                     const SizedBox(height: 20),
                   ],
@@ -474,7 +497,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      // --- [НАЧАЛО] ИСПРАВЛЕННЫЙ БЛОК ---
                                       if (item['image_url'] != null)
                                         AspectRatio(
                                           aspectRatio: 1.3,
@@ -482,7 +504,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                             item['image_url'],
                                             fit: BoxFit.cover,
                                             width: double.infinity,
-                                            errorBuilder: (_, __, ___) => const Icon(
+                                            errorBuilder: (_, __, ___) =>
+                                                const Icon(
                                               Icons.broken_image,
                                               size: 40,
                                               color: Colors.grey,
@@ -490,12 +513,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                           ),
                                         )
                                       else
-                                        // Ваша новая логика плейсхолдера
                                         AspectRatio(
                                           aspectRatio: 1.3,
                                           child: item['is_service']
                                               ? Image.asset(
-                                                  'assets/images/maxresdefault.jpg', // путь к твоей фотке
+                                                  'assets/images/maxresdefault.jpg',
                                                   fit: BoxFit.cover,
                                                   width: double.infinity,
                                                 )
@@ -508,9 +530,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                                   ),
                                                 ),
                                         ),
-                                      // --- [КОНЕЦ] ИСПРАВЛЕННОГО БЛОКА ---
-                                      // Лишний 'else' и старый 'Container' были удалены
-                                      
                                       Padding(
                                         padding: const EdgeInsets.all(8),
                                         child: Column(
@@ -520,13 +539,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                             Text(
                                               item['title'],
                                               style: const TextStyle(
-                                                fontWeight:
-                                                    FontWeight.bold,
+                                                fontWeight: FontWeight.bold,
                                                 fontSize: 14,
                                               ),
                                               maxLines: 2,
-                                              overflow:
-                                                  TextOverflow.ellipsis,
+                                              overflow: TextOverflow.ellipsis,
                                             ),
                                             const SizedBox(height: 4),
                                             if (item['price'] != null)
@@ -534,8 +551,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                                 '${item['price']} €',
                                                 style: TextStyle(
                                                   color: typeColor,
-                                                  fontWeight:
-                                                      FontWeight.w600,
+                                                  fontWeight: FontWeight.w600,
                                                 ),
                                               ),
                                             const SizedBox(height: 4),
@@ -569,8 +585,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                                   style: TextStyle(
                                                     color: typeColor,
                                                     fontSize: 12,
-                                                    fontWeight:
-                                                        FontWeight.w500,
+                                                    fontWeight: FontWeight.w500,
                                                   ),
                                                 ),
                                                 const Spacer(),
@@ -584,9 +599,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                                     constraints:
                                                         const BoxConstraints(),
                                                     onPressed: () =>
-                                                        _deleteItem(
-                                                            item['id']
-                                                                .toString()),
+                                                        _deleteItem(item['id'].toString()),
                                                   ),
                                               ],
                                             ),
@@ -601,7 +614,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                           },
                         ),
                       ),
-            ),
+          ),
         ],
       ),
     );

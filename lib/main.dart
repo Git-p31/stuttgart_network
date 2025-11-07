@@ -26,8 +26,8 @@ class SupabaseService {
 
     if (kIsWeb) {
       // ВАЖЛИВО: УБЕДІТЬСЯ, ЩО У ВАС НЕМАЄ ЛИШНІХ ПРОБІЛІВ У ЦИХ РЯДКАХ!
-      supabaseUrl = 'https://ylhanfsytvhpjqilolwe.supabase.co';
-      supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlsaGFuZnN5dHZocGpxaWxvbHdlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE5MTk3NDEsImV4cCI6MjA3NzQ5NTc0MX0.0KsQsZ8kiad-RT7kjcj0ufX_gnkW3pF2zZ55nBIrPgw';
+      supabaseUrl = 'https://vmckxdfrkvpduqbyugfo.supabase.co';
+      supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZtY2t4ZGZya3ZwZHVxYnl1Z2ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI0NjE1MDAsImV4cCI6MjA3ODAzNzUwMH0.ZrifSQNrf4CFvgY9tYLoc42GO0J1GavZvj-m35teoJI';
     } else {
       // ЗАВАНТАЖЕННЯ .env ПОТРІБНО ТІЛЬКИ ДЛЯ МОБІЛЬНИХ ПЛАТФОРМ
       await dotenv.load(fileName: "assets/.env");

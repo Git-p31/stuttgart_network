@@ -127,7 +127,6 @@ class _WorkshopsScreenState extends State<WorkshopsScreen> {
         final workshops = snapshot.data!['workshops'] as List<Map<String, dynamic>>;
         _profileData = profile;
         _workshops = workshops;
-        
         final bool isAdmin = profile['role'] == 'admin';
 
         return LayoutBuilder(
@@ -532,13 +531,14 @@ class _WorkshopsScreenState extends State<WorkshopsScreen> {
                 final imageBytes = await pickedImage!.readAsBytes();
                 
                 await supabase.storage
-                    .from('workshop_images') // ✅ Имя бакета
+                    .from('workshop_imegas') // ✅ точное имя бакета
                     .uploadBinary(fileName, imageBytes,
                         fileOptions: FileOptions(contentType: pickedImage!.mimeType));
-                
+
                 imageUrl = supabase.storage
-                    .from('workshop_images') // ✅ Имя бакета
+                    .from('workshop_imegas') // ✅ точное имя бакета
                     .getPublicUrl(fileName);
+
                 
                 
               }
