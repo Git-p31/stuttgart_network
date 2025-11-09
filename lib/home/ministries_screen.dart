@@ -1,15 +1,15 @@
-import 'dart:io'; 
-import 'package:flutter/foundation.dart'; 
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart'; 
-import 'package:dotted_border/dotted_border.dart'; // ✅ Импорт
-import 'package:uuid/uuid.dart'; // ✅ Импорт
+import 'package:image_picker/image_picker.dart';
+import 'package:dotted_border/dotted_border.dart';
+import 'package:uuid/uuid.dart';
 import 'package:stuttgart_network/services/database_service.dart';
-import 'package:stuttgart_network/home/ministry_detail_screen.dart'; // ✅ Импорт
+import 'package:stuttgart_network/home/ministry_detail_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 final supabase = Supabase.instance.client;
-const uuid = Uuid(); // ✅ Создаем экземпляр Uuid
+const uuid = Uuid();
 
 class MinistriesScreen extends StatefulWidget {
   const MinistriesScreen({super.key});
@@ -20,12 +20,10 @@ class MinistriesScreen extends StatefulWidget {
 
 class _MinistriesScreenState extends State<MinistriesScreen> {
   final DatabaseService _databaseService = DatabaseService();
-  
   late Future<Map<String, dynamic>> _dataFuture;
   Map<String, dynamic>? _profileData;
   List<Map<String, dynamic>> _ministries = [];
-
-  final double _breakpoint = 600.0; 
+  final double _breakpoint = 600.0;
 
   @override
   void initState() {
@@ -58,16 +56,31 @@ class _MinistriesScreenState extends State<MinistriesScreen> {
     });
   }
 
+  Future<void> _deleteMinistry(String ministryId, BuildContext context) async {
+    try {
+      await supabase.from('ministries').delete().eq('id', ministryId);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Служение удалено')),
+        );
+      }
+      _refreshData();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка удаления: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Map<String, dynamic>>(
       future: _dataFuture,
       builder: (context, snapshot) {
-        
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
         if (snapshot.hasError) {
           return Scaffold(
@@ -79,23 +92,20 @@ class _MinistriesScreenState extends State<MinistriesScreen> {
             ),
           );
         }
-        
+
         final profile = snapshot.data!['profile'] as Map<String, dynamic>;
         final ministries = snapshot.data!['ministries'] as List<Map<String, dynamic>>;
         _profileData = profile;
         _ministries = ministries;
-        
         final bool isAdmin = profile['role'] == 'admin';
 
         return LayoutBuilder(
           builder: (context, constraints) {
             final bool isMobile = constraints.maxWidth < _breakpoint;
-
             return Scaffold(
               body: isMobile
-                  ? _buildMobileLayout(ministries)
+                  ? _buildMobileLayout(ministries, isAdmin)
                   : _buildWebLayout(ministries, isAdmin),
-              
               floatingActionButton: (isAdmin && isMobile)
                   ? FloatingActionButton(
                       onPressed: () => _showResponsiveCreateDialog(context, isMobile),
@@ -109,56 +119,52 @@ class _MinistriesScreenState extends State<MinistriesScreen> {
     );
   }
 
-  /// МАКЕТ ДЛЯ MOBILE (< 600px)
-  Widget _buildMobileLayout(List<Map<String, dynamic>> ministries) {
+  Widget _buildMobileLayout(List<Map<String, dynamic>> ministries, bool isAdmin) {
     return RefreshIndicator(
       onRefresh: () async => _refreshData(),
       child: ListView.builder(
-        padding: const EdgeInsets.all(12.0), 
+        padding: const EdgeInsets.all(12.0),
         itemCount: ministries.length,
         itemBuilder: (context, index) {
           final ministry = ministries[index];
-          return _buildMinistryCard(ministry); // Передаем всю карту
+          return _buildMinistryCard(ministry, isAdmin);
         },
       ),
     );
   }
 
-  /// МАКЕТ ДЛЯ WEB (> 600px)
   Widget _buildWebLayout(List<Map<String, dynamic>> ministries, bool isAdmin) {
     return RefreshIndicator(
       onRefresh: () async => _refreshData(),
       child: GridView.builder(
-        padding: const EdgeInsets.all(24.0), 
+        padding: const EdgeInsets.all(24.0),
         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
           maxCrossAxisExtent: 400.0,
           mainAxisSpacing: 24.0,
           crossAxisSpacing: 24.0,
-          childAspectRatio: 0.9, 
+          childAspectRatio: 0.9,
         ),
         itemCount: isAdmin ? ministries.length + 1 : ministries.length,
         itemBuilder: (context, index) {
           if (isAdmin && index == 0) {
             return _buildCreateCard(context);
           }
-
-          final ministryIndex = isAdmin ? index - 1 : index; 
+          final ministryIndex = isAdmin ? index - 1 : index;
           final ministry = ministries[ministryIndex];
-          return _buildMinistryCard(ministry); // Передаем всю карту
+          return _buildMinistryCard(ministry, isAdmin);
         },
       ),
     );
   }
 
-  /// Карточка "Создать" (только для Web)
   Widget _buildCreateCard(BuildContext context) {
     final theme = Theme.of(context);
     return InkWell(
-      onTap: () => _showResponsiveCreateDialog(context, false), // isMobile = false
+      onTap: () => _showResponsiveCreateDialog(context, false),
       borderRadius: BorderRadius.circular(12.0),
-      child: DottedBorder( 
+      child: DottedBorder(
         color: theme.colorScheme.outline,
-        borderType: BorderType.RRect, 
+        borderType: BorderType.RRect,
         strokeWidth: 2,
         dashPattern: const [8, 4],
         radius: const Radius.circular(12.0),
@@ -176,46 +182,56 @@ class _MinistriesScreenState extends State<MinistriesScreen> {
     );
   }
 
-  /// Виджет-карточка
-  Widget _buildMinistryCard(Map<String, dynamic> ministry) {
-    // Извлекаем данные из карты
+  Widget _buildMinistryCard(Map<String, dynamic> ministry, bool isAdmin) {
     final memberCount = (ministry['ministry_members'] as List).length;
     final imageUrl = ministry['image_url'];
-    
     final theme = Theme.of(context);
+
     return Card(
-      margin: EdgeInsets.zero, 
-      clipBehavior: Clip.hardEdge, // Обрезаем изображение по углам
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.hardEdge,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (imageUrl != null)
-            Image.network(
-              imageUrl,
-              height: 180,
-              width: double.infinity,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => Container(
-                height: 180,
-                color: theme.colorScheme.surfaceContainerHighest,
-                child: const Center(child: Icon(Icons.image_not_supported)),
-              ),
-            )
-          else
-            Container(
-              height: 180,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-              ),
-              child: Center(
-                child: Icon(
-                  Icons.hub,
-                  size: 60,
-                  color: theme.colorScheme.onSurfaceVariant,
+          Stack(
+            children: [
+              if (imageUrl != null)
+                Image.network(
+                  imageUrl,
+                  height: 180,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    height: 180,
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    child: const Center(child: Icon(Icons.image_not_supported)),
+                  ),
+                )
+              else
+                Container(
+                  height: 180,
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  child: Center(
+                    child: Icon(
+                      Icons.hub,
+                      size: 60,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          
+              if (isAdmin)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: IconButton(
+                    icon: const Icon(Icons.more_vert),
+                    onPressed: () {
+                      _showDeleteConfirmation(context, ministry['id'] as String);
+                    },
+                  ),
+                ),
+            ],
+          ),
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
@@ -223,16 +239,16 @@ class _MinistriesScreenState extends State<MinistriesScreen> {
               children: [
                 Text(
                   ministry['name'] ?? 'Без названия',
-                  style: theme.textTheme.titleLarge
-                      ?.copyWith(fontWeight: FontWeight.bold),
+                  style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   ministry['description'] ?? 'Нет описания.',
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 Row(
@@ -240,24 +256,20 @@ class _MinistriesScreenState extends State<MinistriesScreen> {
                     Icon(Icons.groups_outlined, size: 20, color: theme.colorScheme.secondary),
                     const SizedBox(width: 8),
                     Text(
-                      '$memberCount ${memberCount == 1 ? 'участник' : (memberCount > 1 && memberCount < 5 ? 'участника' : 'участников')}',
+                      '$memberCount ${_getMemberText(memberCount)}',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.secondary,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     const Spacer(),
-                    
-                    // ✅ ФИЧА: Кнопка "Подробнее" теперь работает
                     ElevatedButton(
                       onPressed: () {
-                        // Передаем всю карту служения на новый экран
                         Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (context) => MinistryDetailScreen(ministry: ministry),
                           ),
-                          // После возврата (напр., если вышли из служения) - обновляем список
                         ).then((_) => _refreshData());
                       },
                       child: const Text('Подробнее'),
@@ -272,138 +284,155 @@ class _MinistriesScreenState extends State<MinistriesScreen> {
     );
   }
 
-  /// Адаптивный диалог
-  void _showResponsiveCreateDialog(BuildContext context, bool isMobile) {
-    // Контент диалога (один и тот же)
-    final Widget dialogContent = _buildCreateDialogContent();
+  String _getMemberText(int count) {
+    if (count == 1) return 'участник';
+    if (count > 1 && count < 5) return 'участника';
+    return 'участников';
+  }
 
+  void _showDeleteConfirmation(BuildContext context, String ministryId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Удалить служение?'),
+        content: const Text('Это действие нельзя отменить.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _deleteMinistry(ministryId, context);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Удалить', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showResponsiveCreateDialog(BuildContext context, bool isMobile) {
+    final Widget dialogContent = _buildCreateDialogContent();
     if (isMobile) {
-      // --- MOBILE: Выдвижная панель ---
       showModalBottomSheet(
         context: context,
-        isScrollControlled: true, 
+        isScrollControlled: true,
         builder: (ctx) => dialogContent,
       );
     } else {
-      // --- WEB: Центральный диалог ---
       showDialog(
         context: context,
         builder: (ctx) {
           return AlertDialog(
-            content: SizedBox(
-              width: 500, // Фиксируем ширину для web
-              child: dialogContent,
-            ),
-            contentPadding: EdgeInsets.zero, 
+            content: SizedBox(width: 500, child: dialogContent),
+            contentPadding: EdgeInsets.zero,
           );
         },
       );
     }
   }
 
-  /// UI диалога
   Widget _buildCreateDialogContent() {
     final theme = Theme.of(context);
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController();
     final descriptionController = TextEditingController();
-    
     String? selectedLeaderId;
     XFile? pickedImage;
     bool isLoading = false;
 
-    // StatefulBuilder нужен, чтобы UI диалога мог обновляться
     return StatefulBuilder(
       builder: (dialogContext, setDialogState) {
-        
         Future<void> pickImage() async {
-           final ImagePicker picker = ImagePicker();
-            try {
-              final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-              if (image != null) {
-                setDialogState(() {
-                  pickedImage = image;
-                });
-              }
-            } catch (e) {
-              debugPrint('Ошибка выбора фото: $e');
+          final ImagePicker picker = ImagePicker();
+          try {
+            final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+            if (image != null) {
+              setDialogState(() => pickedImage = image);
             }
+          } catch (e) {
+            debugPrint('Ошибка выбора фото: $e');
+          }
         }
 
         Future<void> handleSave() async {
-           if (!formKey.currentState!.validate()) return;
-            if (selectedLeaderId == null) {
+          if (!formKey.currentState!.validate()) return;
+          if (selectedLeaderId == null) {
+            if (dialogContext.mounted) {
               ScaffoldMessenger.of(dialogContext).showSnackBar(
                 const SnackBar(content: Text('Выберите лидера'), backgroundColor: Colors.red),
               );
-              return;
+            }
+            return;
+          }
+
+          setDialogState(() => isLoading = true);
+
+          try {
+            String? imageUrl;
+            if (pickedImage != null) {
+              final extension = pickedImage!.name.split('.').lastOrNull ?? 'jpg';
+              final fileName = '${uuid.v4()}.$extension';
+              final imageBytes = await pickedImage!.readAsBytes();
+
+              await supabase.storage
+                  .from('ministry_images')
+                  .uploadBinary(
+                    fileName,
+                    imageBytes,
+                    fileOptions: FileOptions(contentType: pickedImage!.mimeType),
+                  );
+
+              final publicUrlResponse = supabase.storage
+                  .from('ministry_images')
+                  .getPublicUrl(fileName);
+
+              imageUrl = publicUrlResponse.data!['publicUrl'] as String?;
             }
 
-            setDialogState(() => isLoading = true);
+            final newMinistry = await supabase
+                .from('ministries')
+                .insert({
+                  'name': nameController.text,
+                  'description': descriptionController.text,
+                  'image_url': imageUrl,
+                })
+                .select()
+                .single();
 
-            try {
-              String? imageUrl;
+            final newMinistryId = newMinistry['id'];
 
-              if (pickedImage != null) {
-                // ✅ ИСПРАВЛЕН БАГ: Используем Uuid для уникального имени
-                final extension = pickedImage!.name.split('.').lastOrNull ?? 'jpg';
-                final fileName = '${uuid.v4()}.$extension';
-                final imageBytes = await pickedImage!.readAsBytes();
-                
-                await supabase.storage
-                    .from('ministry_images')
-                    .uploadBinary(fileName, imageBytes,
-                        fileOptions: FileOptions(
-                          contentType: pickedImage!.mimeType,
-                        ));
-                
-                imageUrl = supabase.storage
-                    .from('ministry_images')
-                    .getPublicUrl(fileName);
-              }
+            await supabase.from('ministry_members').insert({
+              'ministry_id': newMinistryId,
+              'user_id': selectedLeaderId!,
+              'role_in_ministry': 'leader',
+            });
 
-              final newMinistry = await supabase
-                  .from('ministries')
-                  .insert({
-                    'name': nameController.text,
-                    'description': descriptionController.text,
-                    'image_url': imageUrl,
-                  })
-                  .select()
-                  .single(); 
-
-              final newMinistryId = newMinistry['id'];
-
-              await supabase.from('ministry_members').insert({
-                'ministry_id': newMinistryId,
-                'user_id': selectedLeaderId!,
-                'role_in_ministry': 'leader',
-              });
-
-              if (dialogContext.mounted) {
-                Navigator.pop(dialogContext); 
-              }
-              _refreshData(); // Обновляем главный экран (простой способ)
-
-            } catch (e) {
-              debugPrint('Ошибка создания служения: $e');
-              if (dialogContext.mounted) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
-                );
-              }
-            } finally {
-              setDialogState(() => isLoading = false);
+            if (dialogContext.mounted) {
+              Navigator.pop(dialogContext);
             }
+            _refreshData();
+          } catch (e) {
+            debugPrint('Ошибка создания служения: $e');
+            if (dialogContext.mounted) {
+              ScaffoldMessenger.of(dialogContext).showSnackBar(
+                SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
+              );
+            }
+          } finally {
+            setDialogState(() => isLoading = false);
+          }
         }
 
-        // --- UI Диалога ---
         return Padding(
           padding: EdgeInsets.only(
-            // Отступ для клавиатуры на mobile
             bottom: MediaQuery.of(dialogContext).viewInsets.bottom,
-            // Стандартные отступы
-            top: 24, left: 24, right: 24,
+            top: 24,
+            left: 24,
+            right: 24,
           ),
           child: SingleChildScrollView(
             child: Form(
@@ -414,7 +443,6 @@ class _MinistriesScreenState extends State<MinistriesScreen> {
                 children: [
                   Text('Новое служение', style: theme.textTheme.headlineSmall),
                   const SizedBox(height: 24),
-                  
                   TextFormField(
                     controller: nameController,
                     decoration: const InputDecoration(labelText: 'Название'),
@@ -427,7 +455,6 @@ class _MinistriesScreenState extends State<MinistriesScreen> {
                     maxLines: 3,
                   ),
                   const SizedBox(height: 24),
-
                   Text('Фотография служения', style: theme.textTheme.labelMedium),
                   const SizedBox(height: 8),
                   InkWell(
@@ -447,7 +474,6 @@ class _MinistriesScreenState extends State<MinistriesScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-
                   Text('Назначить лидера', style: theme.textTheme.labelMedium),
                   FutureBuilder<List<Map<String, dynamic>>>(
                     future: _databaseService.getCrmProfiles(),
@@ -462,7 +488,6 @@ class _MinistriesScreenState extends State<MinistriesScreen> {
                         return Text('Ошибка загрузки лидеров: ${snapshot.error}');
                       }
                       final profiles = snapshot.data ?? [];
-
                       return DropdownButtonFormField<String>(
                         initialValue: selectedLeaderId,
                         hint: const Text('Выберите пользователя'),
@@ -473,16 +498,13 @@ class _MinistriesScreenState extends State<MinistriesScreen> {
                           );
                         }).toList(),
                         onChanged: (value) {
-                          setDialogState(() {
-                            selectedLeaderId = value;
-                          });
+                          setDialogState(() => selectedLeaderId = value);
                         },
                         validator: (val) => val == null ? 'Выберите лидера' : null,
                       );
                     },
                   ),
                   const SizedBox(height: 32),
-                  
                   isLoading
                       ? const Center(child: CircularProgressIndicator())
                       : ElevatedButton.icon(
@@ -502,4 +524,8 @@ class _MinistriesScreenState extends State<MinistriesScreen> {
       },
     );
   }
+}
+
+extension on String {
+  get data => null;
 }
