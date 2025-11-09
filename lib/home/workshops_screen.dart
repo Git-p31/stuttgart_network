@@ -530,17 +530,17 @@ class _WorkshopsScreenState extends State<WorkshopsScreen> {
                 final fileName = '${uuid.v4()}.$extension';
                 final imageBytes = await pickedImage!.readAsBytes();
                 
-                await supabase.storage
-                    .from('workshop_imegas') // ✅ точное имя бакета
-                    .uploadBinary(fileName, imageBytes,
-                        fileOptions: FileOptions(contentType: pickedImage!.mimeType));
+                  await supabase.storage
+                  .from('workshop_images') // <--- ОШИБКА ЗДЕСЬ
+                  .uploadBinary(fileName, imageBytes,
+                  fileOptions: FileOptions(contentType: pickedImage!.mimeType));
 
                 imageUrl = supabase.storage
-                    .from('workshop_imegas') // ✅ точное имя бакета
+                    .from('workshop_images') // <--- И ЗДЕСЬ
                     .getPublicUrl(fileName);
 
                 
-                
+                  
               }
               
               // 2. Готовим данные
