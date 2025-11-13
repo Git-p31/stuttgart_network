@@ -80,24 +80,110 @@ class _EventsScreenState extends State<EventsScreen> {
     });
   }
 
-  void _updateSelectedEvents(DateTime day) {
-    final monthKey = DateTime(day.year, day.month);
-    final eventsForMonth = _eventsCache[monthKey] ?? [];
+  // Генерация дат для повторяющихся событий
+  List<DateTime> _generateRecurringDates({
+    required String recurrenceRule,
+    required DateTime startDate,
+    required DateTime monthStart,
+    required DateTime monthEnd,
+  }) {
+    final List<DateTime> dates = [];
 
-    _selectedEvents = eventsForMonth.where((event) {
-      final eventDate = DateTime.parse(event['starts_at']);
-      return isSameDay(eventDate, day);
-    }).toList();
+    if (recurrenceRule == 'daily') {
+      var current = DateTime(monthStart.year, monthStart.month, 1);
+      while (current.isBefore(monthEnd)) {
+        if (current.isAfter(startDate.subtract(const Duration(days: 1))) &&
+            current.isBefore(monthEnd)) {
+          dates.add(current);
+        }
+        current = current.add(const Duration(days: 1));
+      }
+    } else if (recurrenceRule.startsWith('weekly_on_')) {
+      final dayKey = recurrenceRule.substring(11);
+      final weekdayMap = {
+        'monday': 1,
+        'tuesday': 2,
+        'wednesday': 3,
+        'thursday': 4,
+        'friday': 5,
+        'saturday': 6,
+        'sunday': 7,
+      };
+
+      final targetWeekday = weekdayMap[dayKey] ?? startDate.weekday;
+
+      var current = DateTime(monthStart.year, monthStart.month, 1);
+      while (current.weekday != targetWeekday && current.isBefore(monthEnd)) {
+        current = current.add(const Duration(days: 1));
+      }
+
+      while (current.isBefore(monthEnd)) {
+        if (current.isAfter(startDate.subtract(const Duration(days: 1)))) {
+          dates.add(current);
+        }
+        current = current.add(const Duration(days: 7));
+      }
+    }
+
+    return dates;
   }
 
   List<Map<String, dynamic>> _getEventsForDay(DateTime day) {
     final monthKey = DateTime(day.year, day.month);
     final eventsForMonth = _eventsCache[monthKey] ?? [];
 
-    return eventsForMonth.where((event) {
+    // Прямые события
+    final directEvents = eventsForMonth.where((event) {
       final eventDate = DateTime.parse(event['starts_at']);
       return isSameDay(eventDate, day);
     }).toList();
+
+    // Повторяющиеся события
+    final recurringEvents = eventsForMonth.where((event) {
+      return event['is_recurring'] == true && event['recurrence_rule'] != null;
+    }).map((event) {
+      final startsAt = DateTime.parse(event['starts_at']);
+      final monthStart = DateTime(day.year, day.month, 1);
+      final monthEnd = DateTime(day.year, day.month + 1, 1);
+
+      final recurringDates = _generateRecurringDates(
+        recurrenceRule: event['recurrence_rule'],
+        startDate: startsAt,
+        monthStart: monthStart,
+        monthEnd: monthEnd,
+      );
+
+      if (recurringDates.any((date) => isSameDay(date, day))) {
+        final eventCopy = Map<String, dynamic>.from(event);
+        final newStartsAt = DateTime(
+          day.year,
+          day.month,
+          day.day,
+          startsAt.hour,
+          startsAt.minute,
+        );
+        eventCopy['starts_at'] = newStartsAt.toIso8601String();
+        if (event['ends_at'] != null) {
+          final endsAt = DateTime.parse(event['ends_at']);
+          final newEndsAt = DateTime(
+            day.year,
+            day.month,
+            day.day,
+            endsAt.hour,
+            endsAt.minute,
+          );
+          eventCopy['ends_at'] = newEndsAt.toIso8601String();
+        }
+        return eventCopy;
+      }
+      return null;
+    }).whereType<Map<String, dynamic>>().toList();
+
+    return [...directEvents, ...recurringEvents];
+  }
+
+  void _updateSelectedEvents(DateTime day) {
+    _selectedEvents = _getEventsForDay(day);
   }
 
   void _refreshData() {
@@ -212,8 +298,7 @@ class _EventsScreenState extends State<EventsScreen> {
       ),
       calendarStyle: CalendarStyle(
         todayDecoration: BoxDecoration(
-          // ignore: deprecated_member_use
-          color: theme.colorScheme.primary.withOpacity(0.3),
+          color: theme.colorScheme.primary.withAlpha(77), // замена withOpacity
           shape: BoxShape.circle,
         ),
         selectedDecoration: BoxDecoration(
@@ -227,15 +312,16 @@ class _EventsScreenState extends State<EventsScreen> {
   Widget _buildEventList(ThemeData theme) {
     if (_selectedEvents.isEmpty) {
       return LayoutBuilder(
-          builder: (context, constraints) {
-        return SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: const Center(child: Text('На этот день событий нет.')),
-          ),
-        );
-      });
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: const Center(child: Text('На этот день событий нет.')),
+            ),
+          );
+        },
+      );
     }
 
     return ListView.builder(
@@ -252,12 +338,20 @@ class _EventsScreenState extends State<EventsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  _formatEventTime(event['starts_at'], event['ends_at']),
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.secondary,
-                    fontWeight: FontWeight.w600,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      _formatEventTime(event['starts_at'], event['ends_at']),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.secondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (event['is_recurring'] == true) ...[
+                      const SizedBox(width: 8),
+                      Icon(Icons.repeat, size: 16, color: theme.colorScheme.primary),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -290,13 +384,11 @@ class _EventsScreenState extends State<EventsScreen> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       IconButton(
-                        icon:
-                            Icon(Icons.edit_outlined, color: theme.colorScheme.primary),
+                        icon: Icon(Icons.edit_outlined, color: theme.colorScheme.primary),
                         onPressed: () => _showCreateEditDialog(context, event: event),
                       ),
                       IconButton(
-                        icon:
-                            Icon(Icons.delete_outline, color: theme.colorScheme.error),
+                        icon: Icon(Icons.delete_outline, color: theme.colorScheme.error),
                         onPressed: () => _showDeleteDialog(event['id']),
                       ),
                     ],
@@ -352,25 +444,33 @@ class _EventsScreenState extends State<EventsScreen> {
     TimeOfDay? pickedStartTime = event != null ? TimeOfDay.fromDateTime(DateTime.parse(event['starts_at'])) : null;
     TimeOfDay? pickedEndTime = event != null && event['ends_at'] != null ? TimeOfDay.fromDateTime(DateTime.parse(event['ends_at'])) : null;
 
+    bool isRecurring = event?['is_recurring'] == true;
+    String recurrenceRule = event?['recurrence_rule'] ?? 'weekly_on_monday';
+
     bool isLoading = false;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: theme.cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
       builder: (ctx) {
         return StatefulBuilder(builder: (dialogContext, setDialogState) {
-
           Future<void> pickTime(bool isStart) async {
             final initialTime = (isStart ? pickedStartTime : pickedEndTime) ?? TimeOfDay.now();
-            final time = await showTimePicker(context: context, initialTime: initialTime);
-            if (time == null) return;
-            setDialogState(() {
-              if (isStart) {
-                pickedStartTime = time;
-              } else {
-                pickedEndTime = time;
-              }
-            });
+            final time = await showTimePicker(context: dialogContext, initialTime: initialTime);
+            if (time != null) {
+              setDialogState(() {
+                if (isStart) {
+                  pickedStartTime = time;
+                } else {
+                  pickedEndTime = time;
+                }
+              });
+            }
           }
 
           Future<void> handleSave() async {
@@ -399,18 +499,21 @@ class _EventsScreenState extends State<EventsScreen> {
 
               DateTime? endsAt;
               if (pickedEndTime != null) {
-                 endsAt = DateTime(
+                endsAt = DateTime(
                   pickedDate.year, pickedDate.month, pickedDate.day,
                   pickedEndTime!.hour, pickedEndTime!.minute,
                 );
               }
 
               final eventData = {
-                'title': titleController.text,
-                'description': descriptionController.text,
+                'title': titleController.text.trim(),
+                'description': descriptionController.text.trim(),
+                'location': locationController.text.trim(),
                 'starts_at': startsAt.toIso8601String(),
                 'ends_at': endsAt?.toIso8601String(),
                 'created_by': user.id,
+                'is_recurring': isRecurring,
+                'recurrence_rule': isRecurring ? recurrenceRule : null,
               };
 
               if (isEditMode) {
@@ -433,10 +536,22 @@ class _EventsScreenState extends State<EventsScreen> {
             }
           }
 
+          final weekdays = {
+            'monday': 'Понедельник',
+            'tuesday': 'Вторник',
+            'wednesday': 'Среда',
+            'thursday': 'Четверг',
+            'friday': 'Пятница',
+            'saturday': 'Суббота',
+            'sunday': 'Воскресенье',
+          };
+
           return Padding(
             padding: EdgeInsets.only(
-              bottom: MediaQuery.of(dialogContext).viewInsets.bottom,
-              top: 20, left: 20, right: 20,
+              left: 24,
+              right: 24,
+              top: 20,
+              bottom: MediaQuery.of(dialogContext).viewInsets.bottom + 20,
             ),
             child: SingleChildScrollView(
               child: Form(
@@ -445,61 +560,154 @@ class _EventsScreenState extends State<EventsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(isEditMode ? 'Редактировать событие' : 'Новое событие', style: theme.textTheme.headlineSmall),
-                    Text('на ${DateFormat.yMMMMEEEEd('ru_RU').format(pickedDate)}', style: theme.textTheme.titleMedium),
+                    Center(
+                      child: Container(
+                        width: 48,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.onSurface.withAlpha(77),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      isEditMode ? 'Редактировать событие' : 'Новое событие',
+                      style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      'на ${DateFormat.yMMMMEEEEd('ru_RU').format(pickedDate)}',
+                      style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    ),
                     const SizedBox(height: 24),
+
                     TextFormField(
                       controller: titleController,
-                      decoration: const InputDecoration(labelText: 'Название'),
-                      validator: (val) => val == null || val.isEmpty ? 'Введите название' : null,
+                      decoration: InputDecoration(
+                        labelText: 'Название *',
+                        labelStyle: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      validator: (val) => val == null || val.trim().isEmpty ? 'Введите название' : null,
                     ),
                     const SizedBox(height: 16),
+
                     TextFormField(
                       controller: locationController,
-                      decoration: const InputDecoration(labelText: 'Место (напр. "Главный зал")'),
+                      decoration: InputDecoration(
+                        labelText: 'Место',
+                        labelStyle: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
                     ),
                     const SizedBox(height: 16),
+
                     TextFormField(
                       controller: descriptionController,
-                      decoration: const InputDecoration(labelText: 'Описание'),
-                      maxLines: 4,
+                      decoration: InputDecoration(
+                        labelText: 'Описание',
+                        labelStyle: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      maxLines: 3,
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
+
                     Row(
                       children: [
                         Expanded(
-                          child: InkWell(
+                          child: _buildTimeButton(
+                            label: 'Начало *',
+                            time: pickedStartTime,
                             onTap: () => pickTime(true),
-                            child: Container(
-                              height: 60,
-                              decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(8)),
-                              child: Center(child: Text(pickedStartTime == null ? 'Время *Начала*' : pickedStartTime!.format(context), style: theme.textTheme.bodyLarge)),
-                            ),
+                            theme: theme,
                           ),
                         ),
-                        const SizedBox(width: 16),
+                        const SizedBox(width: 12),
                         Expanded(
-                          child: InkWell(
+                          child: _buildTimeButton(
+                            label: 'Конец',
+                            time: pickedEndTime,
                             onTap: () => pickTime(false),
-                            child: Container(
-                              height: 60,
-                              decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(8)),
-                              child: Center(child: Text(pickedEndTime == null ? 'Время *Конца*' : pickedEndTime!.format(context), style: theme.textTheme.bodyLarge)),
-                            ),
+                            theme: theme,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 20),
+
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: isRecurring,
+                          onChanged: (value) {
+                            setDialogState(() {
+                              isRecurring = value ?? false;
+                            });
+                          },
+                          activeColor: theme.colorScheme.primary,
+                        ),
+                        const Text('Повторяющееся событие', style: TextStyle(fontWeight: FontWeight.w500)),
+                      ],
+                    ),
+                    if (isRecurring) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: theme.dividerColor),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: recurrenceRule,
+                            items: [
+                              const DropdownMenuItem(value: 'daily', child: Text('Ежедневно')),
+                              ...weekdays.keys.map((key) {
+                                return DropdownMenuItem(
+                                  value: 'weekly_on_$key',
+                                  child: Text('Каждый ${weekdays[key]!}'),
+                                );
+                              }),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                setDialogState(() {
+                                  recurrenceRule = value;
+                                });
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            style: theme.textTheme.bodyLarge,
+                            dropdownColor: theme.cardColor,
+                            icon: Icon(Icons.arrow_drop_down, color: theme.colorScheme.onSurfaceVariant),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Событие будет отображаться во все соответствующие даты в календаре.',
+                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+
+                    const SizedBox(height: 24),
                     isLoading
                         ? const Center(child: CircularProgressIndicator())
-                        : ElevatedButton.icon(
-                            onPressed: handleSave,
-                            icon: const Icon(Icons.save),
-                            label: const Text('Сохранить'),
-                            style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 48)),
+                        : SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              onPressed: handleSave,
+                              icon: const Icon(Icons.save, size: 18),
+                              label: Text(isEditMode ? 'Сохранить' : 'Создать'),
+                              style: FilledButton.styleFrom(
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                            ),
                           ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 12),
                   ],
                 ),
               ),
@@ -507,6 +715,38 @@ class _EventsScreenState extends State<EventsScreen> {
           );
         });
       },
+    );
+  }
+
+  Widget _buildTimeButton({
+    required String label,
+    required TimeOfDay? time,
+    required VoidCallback onTap,
+    required ThemeData theme,
+  }) {
+    return OutlinedButton(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        side: const BorderSide(color: Colors.grey),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            time?.format(context) ?? '—',
+            style: theme.textTheme.bodyLarge?.copyWith(
+              fontWeight: time != null ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
