@@ -9,6 +9,8 @@ class DatabaseService {
   /// Приватный геттер для ID текущего пользователя
   String? get _userId => supabase.auth.currentUser?.id;
 
+  get auth => null;
+
   // ---------------- PROFILES ----------------
 
   /// Получает профиль текущего пользователя
@@ -363,6 +365,73 @@ class DatabaseService {
       rethrow;
     }
   }
+  // ---------------- CHATS ----------------
+
+  /// Создает новую группу и добавляет участников (включая создателя)
+  Future<void> createChatGroup(String name, List<String> memberIds) async {
+    if (_userId == null) throw Exception('Пользователь не авторизован');
+    
+    try {
+      await supabase.rpc('create_group_with_members', params: {
+        'group_name': name,
+        'member_ids': memberIds,
+      });
+    } catch (e) {
+      debugPrint('DatabaseService (createChatGroup) Error: $e');
+      rethrow;
+    }
+  }
+
+  /// Получает список групп, в которых состоит пользователь
+  Future<List<Map<String, dynamic>>> getMyChatGroups() async {
+    if (_userId == null) throw Exception('Пользователь не авторизован');
+    try {
+      // Запрос сложный: получаем группу + имя последнего сообщения
+      // (Для начала можно просто `from('chat_groups').select()`, RLS все отфильтрует)
+      final data = await supabase
+          .from('chat_groups')
+          .select('''
+            id,
+            name,
+            image_url,
+            chat_members ( user_id )
+          ''')
+          // RLS (is_member_of_group) автоматически отфильтрует
+          // только те группы, где мы участник.
+          .order('name', ascending: true);
+          
+      return List<Map<String, dynamic>>.from(data);
+    } on PostgrestException catch (e) {
+      debugPrint('DatabaseService (getMyChatGroups) Error: ${e.message}');
+      rethrow;
+    }
+  }
+
+  /// Получает ПОТОК сообщений для одного чата (Realtime)
+  Stream<List<Map<String, dynamic>>> getChatMessagesStream(String groupId) {
+    return supabase
+        .from('chat_messages')
+        .stream(primaryKey: ['id'])
+        .eq('group_id', groupId)
+        .order('created_at', ascending: true)
+        .map((maps) => maps.map((map) => map).toList());
+  }
+
+  /// Отправляет новое сообщение
+  Future<void> sendChatMessage(String groupId, String content) async {
+    if (_userId == null) throw Exception('Пользователь не авторизован');
+    
+    try {
+      await supabase.from('chat_messages').insert({
+        'group_id': groupId,
+        'sender_id': _userId!,
+        'content': content.trim(),
+      });
+    } on PostgrestException catch (e) {
+      debugPrint('DatabaseService (sendChatMessage) Error: $e');
+      rethrow;
+    }
+  }
 
   /// Получает служения, в которых участвует текущий пользователь
   Future<List<Map<String, dynamic>>> getMyMinistries() async {
@@ -390,4 +459,6 @@ class DatabaseService {
       rethrow;
     }
   }
+
+  Future getChatGroupMemberNames(String groupId) async {}
 }
