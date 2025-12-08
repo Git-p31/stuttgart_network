@@ -20,9 +20,9 @@ class SupabaseService {
 
     if (kIsWeb) {
       // Для Web используем встроенные ключи
-      supabaseUrl = 'https://vmckxdfrkvpduqbyugfo.supabase.co';
+      supabaseUrl = 'https://tgbvhlbcduwistqyfnwe.supabase.co';
       supabaseAnonKey =
-          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZtY2t4ZGZya3ZwZHVxYnl1Z2ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI0NjE1MDAsImV4cCI6MjA3ODAzNzUwMH0.ZrifSQNrf4CFvgY9tYLoc42GO0J1GavZvj-m35teoJI';
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnYnZobGJjZHV3aXN0cXlmbndlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUxMzkyMjUsImV4cCI6MjA4MDcxNTIyNX0.GO0dOuixqo2va6vwwGkieWyYuxHZhjRksY1HsmFlOYo';
     } else {
       // Для мобильных платформ используем .env
       await dotenv.load(fileName: "assets/.env");

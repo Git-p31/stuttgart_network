@@ -140,19 +140,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     if (image != null) {
       try {
         const bucketName = 'marketplace_images';
-        final buckets = await supabase.storage.listBuckets();
-        if (!buckets.any((b) => b.name == bucketName)) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                    'Bucket "$bucketName" не найден. Создайте его в Supabase Storage.'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-          return;
-        }
+        // Проверки bucket удалены, так как они ломают Web, если bucket не создан.
+        // Ожидаем, что bucket создан в Supabase.
 
         final fileName = '${uuid.v4()}_${image.name}';
 
@@ -357,8 +346,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                         aspectRatio: 1,
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child:
-                              Image.file(File(image!.path), fit: BoxFit.cover),
+                          child: kIsWeb // ✅ ИСПРАВЛЕННЫЙ БЛОК: Проверка платформы
+                              ? Image.network(image!.path, fit: BoxFit.cover)
+                              : Image.file(File(image!.path), fit: BoxFit.cover),
                         ),
                       ),
                     ],
