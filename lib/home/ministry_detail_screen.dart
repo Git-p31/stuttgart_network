@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:stuttgart_network/services/database_service.dart';
+import 'package:stuttgart_network/home/board_screen.dart'; // Импортируем экран доски
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class MinistryDetailScreen extends StatefulWidget {
-  // Мы получаем всю карту служения с предыдущего экрана
   final Map<String, dynamic> ministry;
 
   const MinistryDetailScreen({super.key, required this.ministry});
@@ -19,14 +19,23 @@ class _MinistryDetailScreenState extends State<MinistryDetailScreen> {
   late bool _isMember;
   late List<Map<String, dynamic>> _members;
   bool _isLoading = false;
+  Map<String, dynamic>? _myProfile;
 
   @override
   void initState() {
     super.initState();
-    // Извлекаем участников из полученной карты
     _members = List<Map<String, dynamic>>.from(widget.ministry['ministry_members'] ?? []);
-    // Проверяем, является ли текущий пользователь участником
     _checkMembership();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    try {
+      final profile = await _databaseService.getMyProfile();
+      if (mounted) setState(() => _myProfile = profile);
+    } catch (e) {
+      debugPrint('Ошибка загрузки профиля: $e');
+    }
   }
 
   void _checkMembership() {
@@ -35,43 +44,29 @@ class _MinistryDetailScreenState extends State<MinistryDetailScreen> {
     });
   }
 
-  /// Логика "Присоединиться" / "Покинуть"
   Future<void> _toggleMembership() async {
     setState(() => _isLoading = true);
     final ministryId = widget.ministry['id'];
 
     try {
       if (_isMember) {
-        // --- Логика "Покинуть" ---
         await _databaseService.leaveMinistry(ministryId);
-        // Удаляем себя из локального списка, чтобы UI мгновенно обновился
         _members.removeWhere((m) => m['user_id'] == _currentUserId);
-        if(mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Вы покинули служение'), backgroundColor: Colors.green),
-          );
-        }
       } else {
-        // --- Логика "Присоединиться" ---
         await _databaseService.joinMinistry(ministryId);
-        // Добавляем себя в локальный список
-        // ПРИМЕЧАНИЕ: 'profiles' здесь будет null, но для _checkMembership это неважно
-        _members.add({'user_id': _currentUserId, 'role_in_ministry': 'member', 'profiles': null});
-        if(mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Вы присоединились к служению!'), backgroundColor: Colors.green),
-          );
-        }
+        _members.add({
+          'user_id': _currentUserId, 
+          'role_in_ministry': 'member', 
+          'profiles': {'full_name': _myProfile?['full_name'] ?? 'Вы'}
+        });
       }
-      _checkMembership(); // Обновляем состояние кнопки
+      _checkMembership();
     } catch (e) {
-      if(mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
-        );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -80,52 +75,26 @@ class _MinistryDetailScreenState extends State<MinistryDetailScreen> {
     final theme = Theme.of(context);
     final imageUrl = widget.ministry['image_url'];
     final name = widget.ministry['name'] ?? 'Без названия';
-    final description = widget.ministry['description'] ?? 'Нет описания.';
     
-    // Ищем лидера
     final leaderMap = _members.firstWhere(
       (m) => m['role_in_ministry'] == 'leader',
-      orElse: () => {'profiles': {'full_name': 'Не назначен'}},
+      orElse: () => {'user_id': '', 'profiles': {'full_name': 'Не назначен'}},
     );
-    final leaderName = leaderMap['profiles']?['full_name'] ?? 'Не назначен';
+    
+    final bool isAdmin = _myProfile?['role'] == 'admin';
+    final bool isLeader = leaderMap['user_id'] == _currentUserId;
 
     return Scaffold(
-      // CustomScrollView дает нам эффект "исчезающего" AppBar с картинкой
       body: CustomScrollView(
         slivers: [
-          // --- AppBar с картинкой ---
           SliverAppBar(
             expandedHeight: 250.0,
-            pinned: true, // AppBar остается видимым
+            pinned: true,
             flexibleSpace: FlexibleSpaceBar(
               title: Text(name, style: const TextStyle(shadows: [Shadow(color: Colors.black, blurRadius: 8)])),
-              titlePadding: const EdgeInsetsDirectional.only(start: 56, bottom: 16),
-              background: imageUrl != null
-                  ? Image.network(
-                      imageUrl,
-                      fit: BoxFit.cover,
-                      // Градиент, чтобы текст AppBar был читаемым
-                      errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.image_not_supported)),
-                      frameBuilder: (context, child, frame, wasSyncLoaded) {
-                        return Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              stops: const [0.5, 1.0],
-                              // ignore: deprecated_member_use
-                              colors: [Colors.transparent, Colors.black.withOpacity(0.7)],
-                            ),
-                          ),
-                          child: child,
-                        );
-                      },
-                    )
-                  : Container(color: theme.colorScheme.surfaceContainerHighest, child: Center(child: Icon(Icons.hub, size: 100, color: theme.colorScheme.primary))),
+              background: imageUrl != null ? Image.network(imageUrl, fit: BoxFit.cover) : Container(color: theme.colorScheme.primary),
             ),
           ),
-
-          // --- Контент страницы ---
           SliverList(
             delegate: SliverChildListDelegate([
               Padding(
@@ -133,7 +102,6 @@ class _MinistryDetailScreenState extends State<MinistryDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // --- Кнопка "Присоединиться/Покинуть" ---
                     if (_isLoading)
                       const Center(child: CircularProgressIndicator())
                     else
@@ -143,58 +111,58 @@ class _MinistryDetailScreenState extends State<MinistryDetailScreen> {
                         label: Text(_isMember ? 'Покинуть служение' : 'Присоединиться'),
                         style: ElevatedButton.styleFrom(
                           minimumSize: const Size(double.infinity, 48),
-                          backgroundColor: _isMember ? theme.colorScheme.errorContainer : theme.colorScheme.primaryContainer,
-                          foregroundColor: _isMember ? theme.colorScheme.onErrorContainer : theme.colorScheme.onPrimaryContainer,
+                          backgroundColor: _isMember ? theme.colorScheme.errorContainer : null,
                         ),
                       ),
                     
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 12),
 
-                    // --- Описание ---
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.push(context, MaterialPageRoute(
+                          builder: (context) => BoardScreen(
+                            ministryId: widget.ministry['id'],
+                            canEdit: isAdmin || isLeader,
+                          ),
+                        ));
+                      },
+                      icon: const Icon(Icons.dashboard_customize_outlined),
+                      label: const Text('Доска задач'),
+                      style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 48)),
+                    ),
+
+                    const SizedBox(height: 24),
                     Text('О служении', style: theme.textTheme.titleLarge),
                     const SizedBox(height: 8),
-                    Text(description, style: theme.textTheme.bodyLarge),
-                    const SizedBox(height: 24),
+                    Text(widget.ministry['description'] ?? 'Нет описания.'),
+                    const Divider(height: 40),
                     
-                    // --- Лидер ---
-                    ListTile(
-                      leading: Icon(Icons.star_border, color: theme.colorScheme.secondary),
-                      title: Text(leaderName),
-                      subtitle: const Text('Лидер служения'),
-                    ),
-                    const Divider(),
-
-                    // --- Список Участников ---
-                    const SizedBox(height: 16),
+                    // --- СПИСОК УЧАСТНИКОВ ---
                     Text('Участники (${_members.length})', style: theme.textTheme.titleLarge),
-                    const SizedBox(height: 8),
-                    
+                    const SizedBox(height: 12),
                     if (_members.isEmpty)
-                      const Text('Участников пока нет.')
+                      const Text('В этом служении пока нет участников.')
                     else
-                      // Оборачиваем в Card для красоты
-                      Card(
-                        margin: EdgeInsets.zero,
-                        child: ListView.builder(
-                          itemCount: _members.length,
-                          shrinkWrap: true, // Говорим ListView занять мин. место
-                          physics: const NeverScrollableScrollPhysics(), // Отключаем скролл
-                          itemBuilder: (context, index) {
-                            final member = _members[index];
-                            final profile = member['profiles'];
-                            // Если мы только что присоединились, 'profiles' еще нет
-                            final memberName = profile?['full_name'] ?? (_isMember ? 'Вы' : 'Загрузка...');
-                            final initial = memberName.isNotEmpty ? memberName[0].toUpperCase() : '?';
+                      ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _members.length,
+                        itemBuilder: (context, index) {
+                          final member = _members[index];
+                          final profile = member['profiles'];
+                          final bool isThisLeader = member['role_in_ministry'] == 'leader';
+                          final String memberName = profile?['full_name'] ?? 'Участник';
 
-                            return ListTile(
-                              leading: CircleAvatar(
-                                child: Text(initial),
-                              ),
-                              title: Text(memberName),
-                              subtitle: Text(member['role_in_ministry'] == 'leader' ? 'Лидер' : 'Участник'),
-                            );
-                          },
-                        ),
+                          return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: CircleAvatar(
+                              backgroundColor: isThisLeader ? theme.colorScheme.primaryContainer : null,
+                              child: Icon(isThisLeader ? Icons.star : Icons.person, size: 20),
+                            ),
+                            title: Text(memberName),
+                            subtitle: Text(isThisLeader ? 'Лидер' : 'Участник'),
+                          );
+                        },
                       ),
                   ],
                 ),

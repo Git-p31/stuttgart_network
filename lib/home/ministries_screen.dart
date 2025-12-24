@@ -106,8 +106,10 @@ class _MinistriesScreenState extends State<MinistriesScreen> {
               body: isMobile
                   ? _buildMobileLayout(ministries, isAdmin)
                   : _buildWebLayout(ministries, isAdmin),
+              // ИСПРАВЛЕНИЕ: Добавлен уникальный heroTag для устранения ошибки Hero
               floatingActionButton: (isAdmin && isMobile)
                   ? FloatingActionButton(
+                      heroTag: 'ministries_fab',
                       onPressed: () => _showResponsiveCreateDialog(context, isMobile),
                       child: const Icon(Icons.add),
                     )
@@ -386,11 +388,8 @@ class _MinistriesScreenState extends State<MinistriesScreen> {
                     fileOptions: FileOptions(contentType: pickedImage!.mimeType),
                   );
 
-              final publicUrlResponse = supabase.storage
-                  .from('ministry_images')
-                  .getPublicUrl(fileName);
-
-              imageUrl = publicUrlResponse.data!['publicUrl'] as String?;
+              // ИСПРАВЛЕНИЕ: Прямое получение URL без обращения к .data!['publicUrl']
+              imageUrl = supabase.storage.from('ministry_images').getPublicUrl(fileName);
             }
 
             final newMinistry = await supabase
@@ -524,8 +523,4 @@ class _MinistriesScreenState extends State<MinistriesScreen> {
       },
     );
   }
-}
-
-extension on String {
-  get data => null;
 }

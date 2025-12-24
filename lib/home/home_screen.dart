@@ -1,5 +1,4 @@
-// [ НУЖНО ДОБАВИТЬ ЭТОТ ИМПОРТ ]
-import 'package:stuttgart_network/home/chats_list_screen.dart'; 
+
 // [ ОСТАЛЬНЫЕ ИМПОРТЫ ОСТАЮТСЯ КАК ЕСТЬ ]
 import 'package:flutter/material.dart';
 import 'package:stuttgart_network/home/profile_screen.dart';
@@ -27,7 +26,6 @@ class _HomeScreenState extends State<HomeScreen> {
     'События',
     'Воркшопы',
     'Маркетплейс',
-    'Чаты', // ✅ ДОБАВЛЕНО
   ];
 
   // Список экранов
@@ -38,7 +36,6 @@ class _HomeScreenState extends State<HomeScreen> {
     const EventsScreen(),
     const WorkshopsScreen(),
     const MarketplaceScreen(),
-    const ChatsListScreen(), // ✅ ДОБАВЛЕНО
   ];
 
   // Список пунктов меню для Drawer
@@ -58,7 +55,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _MenuItem(icon: Icons.event_outlined, title: 'События', index: 3),
       _MenuItem(icon: Icons.school_outlined, title: 'Воркшопы', index: 4),
       _MenuItem(icon: Icons.storefront, title: 'Маркетплейс', index: 5),
-      _MenuItem(icon: Icons.chat_bubble_outline, title: 'Чаты', index: 6), // ✅ ДОБАВЛЕНО
     ]);
   }
 
