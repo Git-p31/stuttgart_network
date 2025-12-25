@@ -1,11 +1,10 @@
-
-// [ ОСТАЛЬНЫЕ ИМПОРТЫ ОСТАЮТСЯ КАК ЕСТЬ ]
 import 'package:flutter/material.dart';
 import 'package:stuttgart_network/home/profile_screen.dart';
 import 'package:stuttgart_network/home/ministries_screen.dart';
 import 'package:stuttgart_network/home/events_screen.dart';
 import 'package:stuttgart_network/home/workshops_screen.dart';
 import 'package:stuttgart_network/home/marketplace_screen.dart';
+import 'package:stuttgart_network/home/crm_screen.dart'; // Импортируем CRM
 import 'package:stuttgart_network/services/auth_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -31,7 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
   // Список экранов
   static final List<Widget> _screens = [
     const ProfileScreen(),
-    const SizedBox.shrink(), // CRM пока недоступен
+    const CrmScreen(), // Заглушка удалена, добавлен реальный экран
     const MinistriesScreen(),
     const EventsScreen(),
     const WorkshopsScreen(),
@@ -50,7 +49,7 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.groups_outlined,
           title: 'CRM',
           index: 1,
-          isDisabled: true),
+          isDisabled: false), // isDisabled теперь false
       _MenuItem(icon: Icons.hub_outlined, title: 'Служения', index: 2),
       _MenuItem(icon: Icons.event_outlined, title: 'События', index: 3),
       _MenuItem(icon: Icons.school_outlined, title: 'Воркшопы', index: 4),
@@ -61,65 +60,9 @@ class _HomeScreenState extends State<HomeScreen> {
   // Метод для обработки нажатия на пункт меню
   void _onItemTapped(_MenuItem item) {
     Navigator.pop(context); // Закрываем Drawer
-    if (item.isDisabled) {
-      _showCrmComingSoon(context);
-    } else {
-      setState(() {
-        _selectedIndex = item.index;
-      });
-    }
-  }
-
-  // Модальный диалог для CRM
-  void _showCrmComingSoon(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black.withAlpha((0.7 * 255).toInt()),
-      builder: (context) => Center(
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color: Colors.black.withAlpha((0.8 * 255).toInt()),
-          ),
-          padding: const EdgeInsets.all(32),
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.lock_outline,
-                size: 80,
-                color: Colors.white.withAlpha((0.9 * 255).toInt()),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Раздел в разработке',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white.withAlpha((0.95 * 255).toInt()),
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Скоро здесь появится CRM-система для управления участниками и служениями.',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.white.withAlpha((0.7 * 255).toInt()),
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Закрыть'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    setState(() {
+      _selectedIndex = item.index;
+    });
   }
 
   @override

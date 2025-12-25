@@ -8,30 +8,20 @@ import 'package:stuttgart_network/services/auth_service.dart';
 import 'package:stuttgart_network/auth/auth_screen.dart';
 import 'package:stuttgart_network/home/home_screen.dart';
 
-/// Сервис инициализации Supabase
 class SupabaseService {
   static bool _isInitialized = false;
 
   static Future<void> initialize() async {
     if (_isInitialized) return;
 
-    late final String supabaseUrl;
-    late final String supabaseAnonKey;
+    // Загружаем .env для всех платформ
+    await dotenv.load(fileName: "assets/.env");
+    
+    final String supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
+    final String supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
 
-    if (kIsWeb) {
-      // Для Web используем встроенные ключи
-      supabaseUrl = 'https://tgbvhlbcduwistqyfnwe.supabase.co';
-      supabaseAnonKey =
-          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnYnZobGJjZHV3aXN0cXlmbndlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUxMzkyMjUsImV4cCI6MjA4MDcxNTIyNX0.GO0dOuixqo2va6vwwGkieWyYuxHZhjRksY1HsmFlOYo';
-    } else {
-      // Для мобильных платформ используем .env
-      await dotenv.load(fileName: "assets/.env");
-      supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
-      supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
-
-      if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
-        throw Exception('Ошибка: отсутствуют ключи Supabase в .env');
-      }
+    if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
+      throw Exception('Ошибка: отсутствуют ключи Supabase в assets/.env');
     }
 
     await Supabase.initialize(
@@ -44,7 +34,7 @@ class SupabaseService {
 
   static SupabaseClient get client {
     if (!_isInitialized) {
-      throw Exception('Supabase не инициализирован. Вызовите SupabaseService.initialize()');
+      throw Exception('Supabase не инициализирован.');
     }
     return Supabase.instance.client;
   }
@@ -57,7 +47,6 @@ Future<void> main() async {
   runApp(const KJMCApp());
 }
 
-/// Главный виджет приложения
 class KJMCApp extends StatelessWidget {
   const KJMCApp({super.key});
 
@@ -77,7 +66,6 @@ class KJMCApp extends StatelessWidget {
   }
 }
 
-/// Проверка авторизации пользователя
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
@@ -87,17 +75,10 @@ class AuthGate extends StatelessWidget {
       stream: AuthService().authStateChange,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
-
         final session = snapshot.data?.session;
-        if (session != null) {
-          return const HomeScreen();
-        } else {
-          return const AuthScreen();
-        }
+        return session != null ? const HomeScreen() : const AuthScreen();
       },
     );
   }

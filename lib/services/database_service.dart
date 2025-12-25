@@ -1,26 +1,26 @@
-import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart'; // Для debugPrint и kIsWeb
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-// Глобальный клиент Supabase, инициализированный в main.dart
+// Глобальный клиент Supabase
 final supabase = Supabase.instance.client;
 
 class DatabaseService {
-  /// Приватный геттер для ID текущего пользователя
+  /// Геттер для ID текущего пользователя
   String? get _userId => supabase.auth.currentUser?.id;
 
-  // ---------------- PROFILES ----------------
+// ---------------- PROFILES & CRM ----------------
 
   /// Получает профиль текущего пользователя
   Future<Map<String, dynamic>> getMyProfile() async {
-    if (_userId == null) throw Exception('Пользователь не авторизован');
+    final userId = _userId;
+    if (userId == null) throw Exception('Пользователь не авторизован');
 
     try {
       final data = await supabase
           .from('profiles')
           .select()
-          .eq('id', _userId!)
-          .maybeSingle(); // Используем maybeSingle для избежания ошибки 406
+          .eq('id', userId)
+          .maybeSingle();
 
       if (data == null) throw Exception('Профиль не найден');
       return Map<String, dynamic>.from(data);
@@ -30,12 +30,23 @@ class DatabaseService {
     }
   }
 
-  /// Получает все профили (для CRM и выбора Лидера)
+  /// Получает расширенные профили для CRM (включая служения и воркшопы)
   Future<List<Map<String, dynamic>>> getCrmProfiles() async {
     try {
+      // Запрос тянет данные профиля и названия связанных сущностей
       final data = await supabase
           .from('profiles')
-          .select('id, full_name, email, phone, role')
+          .select('''
+            id, 
+            full_name, 
+            email, 
+            phone, 
+            role, 
+            address, 
+            birthday,
+            ministries:ministry_members(ministries(name)),
+            workshops:workshop_members(workshops(title))
+          ''')
           .order('full_name', ascending: true);
 
       return List<Map<String, dynamic>>.from(data);
@@ -45,62 +56,77 @@ class DatabaseService {
     }
   }
 
+  /// Обновление расширенных данных пользователя в CRM
+  Future<void> updateProfile({
+    required String userId,
+    required String fullName,
+    required String phone,
+    required String role,
+    String? address,
+    String? birthday,
+  }) async {
+    try {
+      await supabase.from('profiles').update({
+        'full_name': fullName,
+        'phone': phone,
+        'role': role,
+        'address': address,
+        'birthday': birthday, // Формат ГГГГ-ММ-ДД
+      }).eq('id', userId);
+    } catch (e) {
+      debugPrint('DatabaseService (updateProfile) Error: $e');
+      rethrow;
+    }
+  }
+
+  /// Удаление профиля пользователя
+  Future<void> deleteProfile(String userId) async {
+    try {
+      await supabase.from('profiles').delete().eq('id', userId);
+    } catch (e) {
+      debugPrint('DatabaseService (deleteProfile) Error: $e');
+      rethrow;
+    }
+  }
+
   // ---------------- MINISTRIES ----------------
 
-  /// Получает список всех служений с участниками
   Future<List<Map<String, dynamic>>> getMinistries() async {
     try {
       final data = await supabase
           .from('ministries')
           .select('''
-            id,
-            name,
-            description,
-            image_url,
+            id, name, description, image_url,
             ministry_members (
-              user_id,
-              role_in_ministry,
-              profiles (
-                id,
-                full_name,
-                phone
-              )
+              user_id, role_in_ministry,
+              profiles (id, full_name, phone)
             )
           ''')
           .order('name', ascending: true);
-
       return List<Map<String, dynamic>>.from(data);
-    } on PostgrestException catch (e) {
-      debugPrint('DatabaseService (getMinistries) Error: ${e.message}');
+    } catch (e) {
+      debugPrint('DatabaseService (getMinistries) Error: $e');
       rethrow;
     }
   }
 
   Future<void> joinMinistry(String ministryId) async {
-    if (_userId == null) throw Exception('Пользователь не авторизован');
-    try {
-      await supabase.from('ministry_members').insert({
-        'ministry_id': ministryId,
-        'user_id': _userId!,
-        'role_in_ministry': 'member',
-      });
-    } catch (e) {
-      debugPrint('DatabaseService (joinMinistry) Error: $e');
-      rethrow;
-    }
+    final userId = _userId;
+    if (userId == null) throw Exception('Пользователь не авторизован');
+    await supabase.from('ministry_members').insert({
+      'ministry_id': ministryId,
+      'user_id': userId,
+      'role_in_ministry': 'member',
+    });
   }
 
   Future<void> leaveMinistry(String ministryId) async {
-    if (_userId == null) throw Exception('Пользователь не авторизован');
-    try {
-      await supabase
-          .from('ministry_members')
-          .delete()
-          .match({'ministry_id': ministryId, 'user_id': _userId!});
-    } catch (e) {
-      debugPrint('DatabaseService (leaveMinistry) Error: $e');
-      rethrow;
-    }
+    final userId = _userId;
+    if (userId == null) throw Exception('Пользователь не авторизован');
+    await supabase
+        .from('ministry_members')
+        .delete()
+        .match({'ministry_id': ministryId, 'user_id': userId});
   }
 
   // ---------------- WORKSHOPS ----------------
@@ -110,64 +136,35 @@ class DatabaseService {
       final data = await supabase
           .from('workshops')
           .select('''
-            id,
-            title,
-            description,
-            start_date,
-            end_date,
-            max_participants,
-            image_url,
-            tags,
-            recurring_schedule,
-            recurring_time,
-            workshop_members (
-              user_id,
-              profiles (
-                id,
-                full_name,
-                phone
-              )
-            ),
-            leader:leader_id (
-              id,
-              full_name
-            )
+            id, title, description, start_date, end_date, max_participants, image_url, tags,
+            recurring_schedule, recurring_time,
+            workshop_members (user_id, profiles (id, full_name, phone)),
+            leader:leader_id (id, full_name)
           ''')
           .order('start_date', ascending: true);
-
       return List<Map<String, dynamic>>.from(data);
-    } on PostgrestException catch (e) {
-      debugPrint('DatabaseService (getWorkshops) Error: ${e.message}');
+    } catch (e) {
+      debugPrint('DatabaseService (getWorkshops) Error: $e');
       rethrow;
     }
   }
 
   Future<void> registerForWorkshop(String workshopId) async {
-    if (_userId == null) throw Exception('Пользователь не авторизован');
-    try {
-      await supabase
-          .from('workshop_members')
-          .upsert({
-            'workshop_id': workshopId,
-            'user_id': _userId!,
-          }, onConflict: 'workshop_id,user_id');
-    } catch (e) {
-      debugPrint('DatabaseService (registerForWorkshop) Error: $e');
-      rethrow;
-    }
+    final userId = _userId;
+    if (userId == null) throw Exception('Пользователь не авторизован');
+    await supabase.from('workshop_members').upsert({
+      'workshop_id': workshopId,
+      'user_id': userId,
+    });
   }
 
   Future<void> unregisterFromWorkshop(String workshopId) async {
-    if (_userId == null) throw Exception('Пользователь не авторизован');
-    try {
-      await supabase
-          .from('workshop_members')
-          .delete()
-          .match({'workshop_id': workshopId, 'user_id': _userId!});
-    } catch (e) {
-      debugPrint('DatabaseService (unregisterFromWorkshop) Error: $e');
-      rethrow;
-    }
+    final userId = _userId;
+    if (userId == null) throw Exception('Пользователь не авторизован');
+    await supabase
+        .from('workshop_members')
+        .delete()
+        .match({'workshop_id': workshopId, 'user_id': userId});
   }
 
   Future<void> deleteWorkshop(String workshopId) async {
@@ -207,22 +204,8 @@ class DatabaseService {
     try {
       final data = await supabase
           .from('marketplace')
-          .select('''
-            id,
-            user_id,
-            title,
-            description,
-            contact_info,
-            price,
-            image_url,
-            is_service,
-            created_at,
-            profiles (
-              full_name
-            )
-          ''')
+          .select('*, profiles(full_name)')
           .order('created_at', ascending: false);
-
       return List<Map<String, dynamic>>.from(data);
     } catch (e) {
       debugPrint('DatabaseService (getMarketplaceItems) Error: $e');
@@ -236,42 +219,38 @@ class DatabaseService {
     required bool isService,
     String? description,
     double? price,
-    String? imagePath,
+    Uint8List? imageBytes,
+    String? imageExtension,
   }) async {
-    if (_userId == null) throw Exception('Пользователь не авторизован');
+    final userId = _userId;
+    if (userId == null) throw Exception('Пользователь не авторизован');
 
     String? imageUrl;
-    if (imagePath != null) {
+    if (imageBytes != null) {
       try {
-        final file = File(imagePath);
-        final fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.path.split('/').last}';
-        final res = await supabase.storage.from('marketplace_images').uploadBinary(fileName, await file.readAsBytes());
-        imageUrl = supabase.storage.from('marketplace_images').getPublicUrl(res);
+        final fileName = '${DateTime.now().millisecondsSinceEpoch}.${imageExtension ?? 'jpg'}';
+        await supabase.storage.from('marketplace_images').uploadBinary(
+          fileName, 
+          imageBytes,
+          fileOptions: const FileOptions(upsert: true),
+        );
+        imageUrl = supabase.storage.from('marketplace_images').getPublicUrl(fileName);
       } catch (e) {
         debugPrint('Storage Error: $e');
       }
     }
 
-    try {
-      final result = await supabase.from('marketplace').insert({
-        'user_id': _userId!,
-        'title': title,
-        'contact_info': contactInfo,
-        'is_service': isService,
-        if (description != null) 'description': description,
-        if (price != null) 'price': price,
-        if (imageUrl != null) 'image_url': imageUrl,
-      }).select('id').single();
+    final result = await supabase.from('marketplace').insert({
+      'user_id': userId,
+      'title': title,
+      'contact_info': contactInfo,
+      'is_service': isService,
+      if (description != null) 'description': description,
+      if (price != null) 'price': price,
+      if (imageUrl != null) 'image_url': imageUrl,
+    }).select('id').single();
 
-      return result['id'] as String?;
-    } catch (e) {
-      debugPrint('Database Error: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> deleteMarketplaceItem(String itemId) async {
-    await supabase.from('marketplace').delete().eq('id', itemId);
+    return result['id'] as String?;
   }
 
   // ---------------- BOARDS ----------------
@@ -282,12 +261,9 @@ class DatabaseService {
       if (ministryId != null) query = query.eq('ministry_id', ministryId);
       else if (workshopId != null) query = query.eq('workshop_id', workshopId);
 
-      final data = await query.maybeSingle(); // Защита от 406
-      if (data == null) return {'id': '', 'board_items': []};
-      
-      return Map<String, dynamic>.from(data);
+      final data = await query.maybeSingle();
+      return data != null ? Map<String, dynamic>.from(data) : {'id': '', 'board_items': []};
     } catch (e) {
-      debugPrint('DatabaseService (getBoardData) Error: $e');
       return {'id': '', 'board_items': []};
     }
   }
@@ -309,28 +285,6 @@ class DatabaseService {
 
   // ---------------- CHATS ----------------
 
-  Future<void> createChatGroup(String name, List<String> memberIds) async {
-    if (_userId == null) throw Exception('Пользователь не авторизован');
-    await supabase.rpc('create_group_with_members', params: {
-      'group_name': name,
-      'member_ids': memberIds,
-    });
-  }
-
-  Future<List<Map<String, dynamic>>> getMyChatGroups() async {
-    if (_userId == null) throw Exception('Пользователь не авторизован');
-    try {
-      final data = await supabase
-          .from('chat_groups')
-          .select('id, name, image_url, chat_members(user_id)')
-          .order('name', ascending: true);
-      return List<Map<String, dynamic>>.from(data);
-    } catch (e) {
-      debugPrint('DatabaseService (getMyChatGroups) Error: $e');
-      rethrow;
-    }
-  }
-
   Stream<List<Map<String, dynamic>>> getChatMessagesStream(String groupId) {
     return supabase
         .from('chat_messages')
@@ -340,38 +294,35 @@ class DatabaseService {
   }
 
   Future<void> sendChatMessage(String groupId, String content) async {
-    if (_userId == null) throw Exception('Пользователь не авторизован');
+    final userId = _userId;
+    if (userId == null) return;
     await supabase.from('chat_messages').insert({
       'group_id': groupId, 
-      'sender_id': _userId!, 
+      'sender_id': userId, 
       'content': content.trim()
     });
   }
 
-  // ---------------- PERSONAL DATA (Для ProfileScreen) ----------------
+  // ---------------- PERSONAL DATA (ProfileScreen) ----------------
 
   Future<List<Map<String, dynamic>>> getMyWorkshops() async {
-    if (_userId == null) return [];
-    try {
-      final data = await supabase
-          .from('workshops')
-          .select('*, workshop_members!inner(user_id), leader:leader_id(id, full_name)')
-          .eq('workshop_members.user_id', _userId!)
-          .order('start_date', ascending: true);
-      return List<Map<String, dynamic>>.from(data);
-    } catch (e) {
-      debugPrint('DatabaseService (getMyWorkshops) Error: $e');
-      return [];
-    }
+    final userId = _userId;
+    if (userId == null) return [];
+    final data = await supabase
+        .from('workshops')
+        .select('*, workshop_members!inner(user_id), leader:leader_id(id, full_name)')
+        .eq('workshop_members.user_id', userId);
+    return List<Map<String, dynamic>>.from(data);
   }
 
   Future<List<Map<String, dynamic>>> getMyMinistries() async {
-    if (_userId == null) return [];
+    final userId = _userId;
+    if (userId == null) return [];
     try {
       final data = await supabase
           .from('ministries')
           .select('*, ministry_members!inner(user_id)')
-          .eq('ministry_members.user_id', _userId!)
+          .eq('ministry_members.user_id', userId)
           .order('name', ascending: true);
       return List<Map<String, dynamic>>.from(data);
     } catch (e) {
@@ -381,12 +332,13 @@ class DatabaseService {
   }
 
   Future<List<Map<String, dynamic>>> getMyMarketplaceItems() async {
-    if (_userId == null) return [];
+    final userId = _userId;
+    if (userId == null) return [];
     try {
       final data = await supabase
           .from('marketplace')
           .select()
-          .eq('user_id', _userId!)
+          .eq('user_id', userId)
           .order('created_at', ascending: false);
       return List<Map<String, dynamic>>.from(data);
     } catch (e) {
