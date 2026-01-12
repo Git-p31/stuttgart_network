@@ -4,28 +4,33 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter/foundation.dart';
 
-import 'package:stuttgart_network/services/auth_service.dart';
 import 'package:stuttgart_network/auth/auth_screen.dart';
 import 'package:stuttgart_network/home/home_screen.dart';
 
+// Сервис для инициализации Supabase
 class SupabaseService {
   static bool _isInitialized = false;
 
   static Future<void> initialize() async {
     if (_isInitialized) return;
 
-    // Для Web версии самым надежным путем является "assets/.env"
-    // если файл лежит в корне проекта и прописан в pubspec.yaml
+    // Пытаемся загрузить файл конфигурации
     try {
-      await dotenv.load(fileName: "assets/.env");
-      debugPrint('✅ Конфигурация .env загружена');
+      // В Flutter Web для dotenv самым стабильным является путь "assets/имя_файла"
+      // так как физически в build/web файлы ложатся в папку assets
+      await dotenv.load(fileName: "assets/env_config.txt");
+      debugPrint('✅ Конфигурация успешно загружена из assets/env_config.txt');
     } catch (e) {
-      debugPrint('⚠️ Ошибка загрузки assets/.env: $e');
-      debugPrint('🔄 Попытка загрузки из корня...');
+      debugPrint('⚠️ Не удалось загрузить через assets/, пробуем прямой путь...');
       try {
-        await dotenv.load(fileName: ".env");
+        // Резервный вариант для некоторых серверных конфигураций
+        await dotenv.load(fileName: "env_config.txt");
+        debugPrint('✅ Конфигурация загружена через env_config.txt');
       } catch (e2) {
-        throw Exception('❌ Критическая ошибка: Файл .env не найден. Проверьте pubspec.yaml');
+        debugPrint('‼️ Ошибка: Файл конфигурации не найден в ассетах сборки.');
+        // Мы не прерываем выполнение, чтобы не вызвать белый экран, 
+        // но Supabase не инициализируется без ключей.
+        return;
       }
     }
 
@@ -33,9 +38,11 @@ class SupabaseService {
     final String supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
 
     if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
-      throw Exception('❌ Ошибка: Ключи SUPABASE_URL или SUPABASE_ANON_KEY пусты!');
+      debugPrint('❌ Ошибка: Ключи в env_config.txt не найдены или пусты!');
+      return;
     }
 
+    // Инициализация Supabase
     await Supabase.initialize(
       url: supabaseUrl,
       anonKey: supabaseAnonKey,
@@ -45,24 +52,25 @@ class SupabaseService {
     debugPrint('🚀 Supabase успешно запущен!');
   }
 
+  // Геттер для удобного доступа к клиенту из любой части приложения
   static SupabaseClient get client {
-    if (!_isInitialized) throw Exception('Supabase не инициализирован.');
+    if (!_isInitialized) throw Exception('Supabase еще не готов.');
     return Supabase.instance.client;
   }
 }
 
 Future<void> main() async {
-  // 1. Обязательная привязка виджетов
+  // 1. Привязка виджетов (обязательно для асинхронного main)
   WidgetsFlutterBinding.ensureInitialized();
   
   try {
-    // 2. Локализация (русский язык)
+    // 2. Инициализация даты для Intl (русская локализация)
     await initializeDateFormatting('ru_RU', null);
     
-    // 3. Загрузка конфигов и старт Supabase
+    // 3. Запуск нашего сервиса Supabase
     await SupabaseService.initialize();
   } catch (e) {
-    debugPrint('‼️ Ошибка при запуске приложения: $e');
+    debugPrint('‼️ Критическая ошибка при старте: $e');
   }
 
   runApp(const KJMCApp());
@@ -83,6 +91,7 @@ class KJMCApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
+      // AuthGate сам решит, показать экран входа или главный экран
       home: const AuthGate(),
     );
   }
@@ -93,18 +102,24 @@ class AuthGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Используем встроенный стрим Supabase для отслеживания сессии пользователя
     return StreamBuilder<AuthState>(
-      // Убедитесь, что в AuthService используется корректный клиент Supabase
       stream: Supabase.instance.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
+        // Пока ждем ответа от сервера (проверка токена)
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
         
+        // Если сессия существует — идем домой, если нет — на вход
         final session = snapshot.data?.session;
-        return session != null ? const HomeScreen() : const AuthScreen();
+        if (session != null) {
+          return const HomeScreen();
+        } else {
+          return const AuthScreen();
+        }
       },
     );
   }
