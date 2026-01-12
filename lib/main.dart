@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:flutter/foundation.dart'; // Для kIsWeb и debugPrint
+import 'package:flutter/foundation.dart';
 
 import 'package:stuttgart_network/services/auth_service.dart';
 import 'package:stuttgart_network/auth/auth_screen.dart';
@@ -14,39 +14,26 @@ class SupabaseService {
   static Future<void> initialize() async {
     if (_isInitialized) return;
 
-    bool isLoaded = false;
-    
-    // ПУТИ ДЛЯ ПОИСКА:
-    // 1. "assets/assets/.env" — путь с вашего скриншота (из-за вложенности папок)
-    // 2. "assets/.env" — стандартный путь Flutter
-    // 3. ".env" — корень ассетов в Web
-    final List<String> pathsToTry = [
-      "assets/assets/.env",
-      "assets/config.env", 
-      "assets/.env", 
-      ".env"
-    ];
-
-    for (String path in pathsToTry) {
+    // Для Web версии самым надежным путем является "assets/.env"
+    // если файл лежит в корне проекта и прописан в pubspec.yaml
+    try {
+      await dotenv.load(fileName: "assets/.env");
+      debugPrint('✅ Конфигурация .env загружена');
+    } catch (e) {
+      debugPrint('⚠️ Ошибка загрузки assets/.env: $e');
+      debugPrint('🔄 Попытка загрузки из корня...');
       try {
-        await dotenv.load(fileName: path);
-        isLoaded = true;
-        debugPrint('✅ Конфигурация успешно загружена по пути: $path');
-        break; 
-      } catch (e) {
-        debugPrint('ℹ️ Поиск в $path не удался, пробуем дальше...');
+        await dotenv.load(fileName: ".env");
+      } catch (e2) {
+        throw Exception('❌ Критическая ошибка: Файл .env не найден. Проверьте pubspec.yaml');
       }
-    }
-
-    if (!isLoaded) {
-      throw Exception('❌ Ошибка: Файл .env не найден. Проверьте папку build/web/assets/');
     }
 
     final String supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
     final String supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
 
     if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
-      throw Exception('❌ Ошибка: Ключи Supabase не найдены внутри загруженного файла');
+      throw Exception('❌ Ошибка: Ключи SUPABASE_URL или SUPABASE_ANON_KEY пусты!');
     }
 
     await Supabase.initialize(
@@ -55,7 +42,7 @@ class SupabaseService {
     );
 
     _isInitialized = true;
-    debugPrint('🚀 Supabase инициализирован успешно!');
+    debugPrint('🚀 Supabase успешно запущен!');
   }
 
   static SupabaseClient get client {
@@ -65,17 +52,17 @@ class SupabaseService {
 }
 
 Future<void> main() async {
-  // Инициализация движка Flutter
+  // 1. Обязательная привязка виджетов
   WidgetsFlutterBinding.ensureInitialized();
   
   try {
-    // Настройка локализации
+    // 2. Локализация (русский язык)
     await initializeDateFormatting('ru_RU', null);
     
-    // Запуск Supabase
+    // 3. Загрузка конфигов и старт Supabase
     await SupabaseService.initialize();
   } catch (e) {
-    debugPrint('⚠️ Ошибка при запуске: $e');
+    debugPrint('‼️ Ошибка при запуске приложения: $e');
   }
 
   runApp(const KJMCApp());
@@ -87,13 +74,14 @@ class KJMCApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'KJMC',
+      title: 'KJMC Stuttgart',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.blueAccent,
           brightness: Brightness.dark,
         ),
+        useMaterial3: true,
       ),
       home: const AuthGate(),
     );
@@ -106,7 +94,8 @@ class AuthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<AuthState>(
-      stream: AuthService().authStateChange,
+      // Убедитесь, что в AuthService используется корректный клиент Supabase
+      stream: Supabase.instance.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
