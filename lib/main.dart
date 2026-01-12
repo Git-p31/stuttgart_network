@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart'; // Для kIsWeb и debugPrint
 
 import 'package:stuttgart_network/services/auth_service.dart';
 import 'package:stuttgart_network/auth/auth_screen.dart';
@@ -14,14 +14,39 @@ class SupabaseService {
   static Future<void> initialize() async {
     if (_isInitialized) return;
 
-    // Загружаем .env для всех платформ
-    await dotenv.load(fileName: "assets/.env");
+    bool isLoaded = false;
     
+    // ПУТИ ДЛЯ ПОИСКА:
+    // 1. "assets/assets/.env" — путь с вашего скриншота (из-за вложенности папок)
+    // 2. "assets/.env" — стандартный путь Flutter
+    // 3. ".env" — корень ассетов в Web
+    final List<String> pathsToTry = [
+      "assets/assets/.env",
+      "assets/config.env", 
+      "assets/.env", 
+      ".env"
+    ];
+
+    for (String path in pathsToTry) {
+      try {
+        await dotenv.load(fileName: path);
+        isLoaded = true;
+        debugPrint('✅ Конфигурация успешно загружена по пути: $path');
+        break; 
+      } catch (e) {
+        debugPrint('ℹ️ Поиск в $path не удался, пробуем дальше...');
+      }
+    }
+
+    if (!isLoaded) {
+      throw Exception('❌ Ошибка: Файл .env не найден. Проверьте папку build/web/assets/');
+    }
+
     final String supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
     final String supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
 
     if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
-      throw Exception('Ошибка: отсутствуют ключи Supabase в assets/.env');
+      throw Exception('❌ Ошибка: Ключи Supabase не найдены внутри загруженного файла');
     }
 
     await Supabase.initialize(
@@ -30,20 +55,29 @@ class SupabaseService {
     );
 
     _isInitialized = true;
+    debugPrint('🚀 Supabase инициализирован успешно!');
   }
 
   static SupabaseClient get client {
-    if (!_isInitialized) {
-      throw Exception('Supabase не инициализирован.');
-    }
+    if (!_isInitialized) throw Exception('Supabase не инициализирован.');
     return Supabase.instance.client;
   }
 }
 
 Future<void> main() async {
+  // Инициализация движка Flutter
   WidgetsFlutterBinding.ensureInitialized();
-  await initializeDateFormatting('ru_RU', null);
-  await SupabaseService.initialize();
+  
+  try {
+    // Настройка локализации
+    await initializeDateFormatting('ru_RU', null);
+    
+    // Запуск Supabase
+    await SupabaseService.initialize();
+  } catch (e) {
+    debugPrint('⚠️ Ошибка при запуске: $e');
+  }
+
   runApp(const KJMCApp());
 }
 
@@ -75,8 +109,11 @@ class AuthGate extends StatelessWidget {
       stream: AuthService().authStateChange,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
+        
         final session = snapshot.data?.session;
         return session != null ? const HomeScreen() : const AuthScreen();
       },
