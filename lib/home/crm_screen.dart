@@ -111,13 +111,13 @@ class _CrmScreenState extends State<CrmScreen> {
           ElevatedButton(
             onPressed: () async {
               try {
-                // Вызываем метод обновления в DatabaseService
                 await _dbService.updateProfile(
                   userId: profile['id'],
                   fullName: nameController.text.trim(),
                   phone: phoneController.text.trim(),
                   role: currentRole,
-                  // Дополнительные поля передаются в Map или именованные аргументы
+                  address: addressController.text.trim(), // ДОБАВЬТЕ ЭТО
+                  birthday: dobController.text.trim(),    // ДОБАВЬТЕ ЭТО
                 );
                 if (mounted) Navigator.pop(context);
                 _loadProfiles();
