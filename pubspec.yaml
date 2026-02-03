@@ -7,7 +7,6 @@ environment:
   sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
-
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
@@ -20,17 +19,14 @@ dependencies:
   table_calendar: ^3.1.2
   url_launcher: ^6.3.1
   shared_preferences: ^2.2.0  
-  flutter_local_notifications: ^17.0.0
   timezone: ^0.9.4
-  firebase_core: ^4.4.0
-  firebase_messaging: ^16.1.1
+  # firebase_core, firebase_messaging и flutter_local_notifications удалены
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
   flutter_launcher_icons: ^0.14.4
-
 
 flutter_launcher_icons:
   android: true
@@ -45,7 +41,5 @@ flutter_launcher_icons:
     
 flutter:
   uses-material-design: true
-
-
-assets:
-    - assets/images
+  assets:
+    - assets/images/
